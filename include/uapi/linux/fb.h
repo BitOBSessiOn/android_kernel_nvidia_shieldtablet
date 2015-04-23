@@ -156,9 +156,14 @@
 #define FB_CAP_Y420_DC_36	4	/* YCbCr 4:2:0 deep color 36bpp */
 #define FB_CAP_Y420_DC_48	8	/* YCbCr 4:2:0 deep color 48bpp */
 #define FB_CAP_HDR		16	/* Device supports HDR*/
+/* Device supports overriding range for RGB modes */
+#define FB_CAP_RGB_QUANT_SELECTABLE		32
+/* Device supports overriding range for YUV modes */
+#define FB_CAP_YUV_QUANT_SELECTABLE		64
 #define FB_CAP_DC_MASK		(FB_CAP_Y420_DC_30 | \
 				FB_CAP_Y420_DC_36 | FB_CAP_Y420_DC_48 | \
-				FB_CAP_HDR)
+				FB_CAP_HDR | FB_CAP_RGB_QUANT_SELECTABLE | \
+				FB_CAP_YUV_QUANT_SELECTABLE)
 
 #define FB_COL_XVYCC601		0x1
 #define FB_COL_XVYCC709		0x2
@@ -275,8 +280,9 @@ struct fb_bitfield {
 #define FB_VMODE_IS_DETAILED	0x080000
 #define FB_VMODE_IS_CEA		0x100000
 #define FB_VMODE_IS_HDMI_EXT	0x200000
+#define FB_VMODE_LIMITED_RANGE	0x400000
 
-#define FB_VMODE_MASK		0x38ffff
+#define FB_VMODE_MASK		0x78ffff
 
 #define FB_VMODE_YWRAP		0x10000	/* ywrap instead of panning     */
 #define FB_VMODE_SMOOTH_XPAN	0x20000	/* smooth xpan possible (internally used) */

@@ -1,7 +1,8 @@
 GCOV_PROFILE := y
 
-asflags-y				+= -march=armv7-a
-#subdir-ccflags-y := -Werror
+asflags-y				+= -mcpu=cortex-a15
+
+#subdir-ccflags-y := -Werror	
 
 obj-y                                   += ahb.o
 obj-y                                   += common.o
@@ -60,7 +61,8 @@ obj-y                                   += sleep.o
 obj-$(CONFIG_TEGRA_USE_NCT)             += nct.o nct_sysfs.o
 
 plus_sec := $(call as-instr,.arch_extension sec,+sec)
-AFLAGS_sleep.o :=-Wa,-march=armv7-a$(plus_sec)
+#AFLAGS_sleep.o :=-Wa,-march=armv7-a$(plus_sec)
+AFLAGS_sleep.o :=-Wa,-mcpu=cortex-a15$(plus_sec)
 
 obj-y                                   += kfuse.o
 obj-$(CONFIG_TEGRA_PTM)                 += tegra_ptm.o

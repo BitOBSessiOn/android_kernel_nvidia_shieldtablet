@@ -5,6 +5,9 @@ ccflags-y += -Idrivers/devfreq
 ccflags-y += -Wno-multichar
 ccflags-y += -Werror
 
+# Added ops line for cortex-a15 optimizations
+ccflags-y += -O3 -ffast-math -mtune=cortex-a15 -marm -mfpu=neon-vfpv4
+
 obj-$(CONFIG_GK20A) += \
 	gk20a.o \
 	as_gk20a.o \

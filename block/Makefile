@@ -21,5 +21,8 @@ obj-$(CONFIG_IOSCHED_SIO)       += sio-iosched.o
 obj-$(CONFIG_IOSCHED_ZEN)       += zen-iosched.o
 obj-$(CONFIG_IOSCHED_VR)        += vr-iosched.o
 obj-$(CONFIG_IOSCHED_FIOPS)	+= fiops-iosched.o
+
+
+>>>>>>> d03986c... block: cgroups, kconfig, build bits for BFQ-v7r6-3.10.8+
 obj-$(CONFIG_BLOCK_COMPAT)	+= compat_ioctl.o
 obj-$(CONFIG_BLK_DEV_INTEGRITY)	+= blk-integrity.o

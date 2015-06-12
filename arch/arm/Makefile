@@ -38,7 +38,9 @@ NO_WERROR_FLAGS	:= \
 	$(call cc-option,-Wno-error=maybe-uninitialized) \
 	$(call cc-option,-Wno-error=unused-parameter) \
 	$(call cc-option,-Wno-error=array-bounds) \
-	$(call cc-option,-Wno-error=frame-larger-than)
+	$(call cc-option,-Wno-error=frame-larger-than) 
+#\
+#	$(call cc-option,-Wno-error=implicit-function-declaration)
 
 KBUILD_CFLAGS	+= $(NO_WERROR_FLAGS) $(GRAPHITE_FLAGS)
 
@@ -287,6 +289,7 @@ core-y				+= arch/arm/kernel/ arch/arm/mm/ arch/arm/common/
 core-y				+= arch/arm/net/
 core-y				+= arch/arm/crypto/
 core-y				+= $(machdirs) $(platdirs)
+core-$(CONFIG_INTELLI_PLUG)	+= arch/arm/hotplug/
 
 drivers-$(CONFIG_OPROFILE)      += arch/arm/oprofile/
 

@@ -436,6 +436,13 @@ config TEGRA_EMC_SCALING_ENABLE
 	bool "Enable scaling the memory frequency"
 	default n
 
+config TEGRA_CPU_OVERCLOCK
+	bool "Enable Tegra K1 overclocking to 2,499 GHz"
+	default n
+	help
+	  This option enables Tegra K1 Overclocking to 2,499 GHz and
+	  GPU to 924 MHz.
+
 config TEGRA_CPU_DVFS
 	bool "Enable voltage scaling on Tegra CPU"
 	default y
@@ -497,6 +504,7 @@ config TEGRA_THERMAL_THROTTLE
 
 config TEGRA_THERMAL_THROTTLE_EXACT_FREQ
 	bool "Use exact cpu frequency capping when thermal throttling"
+	depends on !TEGRA_CPU_OVERCLOCK
 	depends on TEGRA_THERMAL_THROTTLE
 	default y if TEGRA_THERMAL_THROTTLE
 	default n

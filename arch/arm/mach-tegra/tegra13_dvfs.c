@@ -432,7 +432,11 @@ static int resolve_core_override(int min_override_mv)
 /* GPU DVFS tables */
 static unsigned long gpu_max_freq[] = {
 /* speedo_id	0	1	2	*/
+		804000, 853000, 924000,
+/* Original values:
 		804000, 924000,
+/*
+*/
 };
 static struct gpu_cvb_dvfs gpu_cvb_dvfs_table[] = {
 	{

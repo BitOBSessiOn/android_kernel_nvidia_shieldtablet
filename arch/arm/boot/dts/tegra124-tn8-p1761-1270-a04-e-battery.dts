@@ -28,8 +28,6 @@
 		};
 	};
 
-
-
 	usb-devices {
 		maxim-charger {
 			maxim,max-board-vbus-voltage-uv = <12000000>;

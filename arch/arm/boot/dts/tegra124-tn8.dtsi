@@ -65,4 +65,8 @@
 		nvidia,qc2-input-voltage = <2>;
 		nvidia,qc2-current-limit-ma = <1200>;
 	};
+
+	otg@7d000000 {
+		nvidia,turn-off-vbus-in-lp0;
+	};
 };

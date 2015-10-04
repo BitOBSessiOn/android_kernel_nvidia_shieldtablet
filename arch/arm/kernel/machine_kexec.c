@@ -16,6 +16,8 @@
 #include <asm/cacheflush.h>
 #include <asm/mach-types.h>
 #include <asm/system_misc.h>
+#include <linux/memblock.h>
+#include <linux/of_fdt.h>
 
 extern const unsigned char relocate_new_kernel[];
 extern const unsigned int relocate_new_kernel_size;
@@ -24,6 +26,11 @@ extern unsigned long kexec_start_address;
 extern unsigned long kexec_indirection_page;
 extern unsigned long kexec_mach_type;
 extern unsigned long kexec_boot_atags;
+#ifdef CONFIG_KEXEC_HARDBOOT
+extern unsigned long kexec_hardboot;
+extern unsigned long kexec_boot_atags_len;
+extern unsigned long kexec_kernel_len;
+#endif
 
 static atomic_t waiting_for_crash_ipi;
 
@@ -49,12 +56,22 @@ int machine_kexec_prepare(struct kimage *image)
 					       current_segment->memsz))
 			return -EINVAL;
 
+#ifdef CONFIG_KEXEC_HARDBOOT
+		if(current_segment->mem == image->start)
+			kexec_kernel_len = current_segment->memsz;
+#endif
+
 		err = get_user(header, (__be32*)current_segment->buf);
 		if (err)
 			return err;
 
 		if (be32_to_cpu(header) == OF_DT_HEADER)
+		{
 			kexec_boot_atags = current_segment->mem;
+#ifdef CONFIG_KEXEC_HARDBOOT
+			kexec_boot_atags_len = current_segment->memsz;
+#endif
+		}
 	}
 	return 0;
 }
@@ -153,7 +170,9 @@ void machine_kexec(struct kimage *image)
 	kexec_mach_type = machine_arch_type;
 	if (!kexec_boot_atags)
 		kexec_boot_atags = image->start - KEXEC_ARM_ZIMAGE_OFFSET + KEXEC_ARM_ATAGS_OFFSET;
-
+#ifdef CONFIG_KEXEC_HARDBOOT
+	kexec_hardboot = image->hardboot;
+#endif
 
 	/* copy our kernel relocation code to the control code page */
 	memcpy(reboot_code_buffer,

@@ -1880,7 +1880,9 @@ static void __init tegra_reserve_ramoops_memory(unsigned long reserve_size)
 	ramoops_data.console_size = reserve_size - FTRACE_MEM_SIZE;
 	ramoops_data.ftrace_size = FTRACE_MEM_SIZE;
 	ramoops_data.dump_oops = 1;
-	memblock_remove(ramoops_data.mem_address, ramoops_data.mem_size);
+	// Reserve an extra 1M before ramoops to store kexec stuff
+	memblock_remove(ramoops_data.mem_address - SZ_1M, ramoops_data.mem_size + SZ_1M);
+	pr_err("Hardboot page reserved at 0x%lX\n", ramoops_data.mem_address - SZ_1M);
 }
 
 static int __init tegra_register_ramoops_device(void)

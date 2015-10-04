@@ -19,6 +19,10 @@
 #ifndef __MACH_TEGRA_MEMORY_H
 #define __MACH_TEGRA_MEMORY_H
 
+#if defined(CONFIG_KEXEC_HARDBOOT)
+#define KEXEC_HB_PAGE_ADDR		UL(0xFB100000)
+#endif
+
 /*
  * Unaligned DMA causes tegra dma to place data on 4-byte boundary after
  * expected address. Call to skb_reserve(skb, NET_IP_ALIGN) was causing skb

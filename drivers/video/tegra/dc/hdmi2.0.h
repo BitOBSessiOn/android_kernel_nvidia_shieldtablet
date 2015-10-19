@@ -1,7 +1,7 @@
 /*
  * drivers/video/tegra/dc/hdmi2.0.h
  *
- * Copyright (c) 2014-2015, NVIDIA CORPORATION, All rights reserved.
+ * Copyright (c) 2014-2016, NVIDIA CORPORATION, All rights reserved.
  * Author: Animesh Kishore <ankishore@nvidia.com>
  *
  * This software is licensed under the terms of the GNU General Public
@@ -32,6 +32,9 @@
 #define HDMI_SCDC_STATUS_FLAGS	(0x21)
 #define HDMI_SCDC_STATUS_FLAGS_SCRAMBLING_EN	(1)
 #define HDMI_SCDC_STATUS_FLAGS_SCRAMBLING_DIS	(0)
+
+#define YUV_MASK (FB_VMODE_Y420 | FB_VMODE_Y420_ONLY | \
+				FB_VMODE_Y422 | FB_VMODE_Y444)
 
 enum {
 	HDMI_INFOFRAME_TYPE_VENDOR = 0x81,

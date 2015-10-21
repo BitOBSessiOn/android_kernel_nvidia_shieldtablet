@@ -67,9 +67,6 @@
 #define BLOCK_SIZE	SECTION_SIZE
 #endif
 
-#define KERNEL_START	KERNEL_RAM_VADDR
-#define KERNEL_END	_end
-
 /*
  * Initial memory map attributes.
  */

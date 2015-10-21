@@ -72,6 +72,9 @@
 #error Top of 64-bit user space clashes with start of module space
 #endif
 
+#define KERNEL_START      KERNEL_RAM_VADDR
+#define KERNEL_END        _end
+
 /*
  * Physical vs virtual RAM address space conversion.  These are
  * private definitions which should NOT be used outside memory.h

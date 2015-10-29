@@ -19,69 +19,8 @@ struct ctl_table_header;
 struct mempolicy;
 
 /*
- * This is not completely implemented yet. The idea is to
- * create an in-memory tree (like the actual /proc filesystem
- * tree) of these proc_dir_entries, so that we can dynamically
- * add new files to /proc.
- *
- * The "next" pointer creates a linked list of one /proc directory,
- * while parent/subdir create the directory structure (every
- * /proc file has a parent, but "subdir" is NULL for all
- * non-directory entries).
- */
-struct proc_dir_entry {
-	unsigned int low_ino;
-	umode_t mode;
-	nlink_t nlink;
-	kuid_t uid;
-	kgid_t gid;
-	loff_t size;
-	const struct inode_operations *proc_iops;
-	const struct file_operations *proc_fops;
-	struct proc_dir_entry *next, *parent, *subdir;
-	void *data;
-	atomic_t count;		/* use count */
-	atomic_t in_use;	/* number of callers into module in progress; */
-			/* negative -> it's going away RSN */
-	struct completion *pde_unload_completion;
-	struct list_head pde_openers;	/* who did ->open, but not ->release */
-	spinlock_t pde_unload_lock; /* proc_fops checks and pde_users bumps */
-	u8 namelen;
-	char name[];
-};
-
-union proc_op {
-	int (*proc_get_link)(struct dentry *, struct path *);
-	int (*proc_read)(struct task_struct *task, char *page);
-	int (*proc_show)(struct seq_file *m,
-		struct pid_namespace *ns, struct pid *pid,
-		struct task_struct *task);
-};
-
-struct proc_inode {
-	struct pid *pid;
-	int fd;
-	union proc_op op;
-	struct proc_dir_entry *pde;
-	struct ctl_table_header *sysctl;
-	struct ctl_table *sysctl_entry;
-	struct proc_ns ns;
-	struct inode vfs_inode;
-};
-
-/*
  * General functions
  */
-static inline struct proc_inode *PROC_I(const struct inode *inode)
-{
-	return container_of(inode, struct proc_inode, vfs_inode);
-}
-
-static inline struct proc_dir_entry *PDE(const struct inode *inode)
-{
-	return PROC_I(inode)->pde;
-}
-
 static inline void *__PDE_DATA(const struct inode *inode)
 {
 	return PDE(inode)->data;

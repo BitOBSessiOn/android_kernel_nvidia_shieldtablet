@@ -6,8 +6,28 @@
 
 #include <linux/types.h>
 #include <linux/fs.h>
+#include <linux/proc_ns.h>
 
-struct proc_dir_entry;
+struct proc_dir_entry {
+	unsigned int low_ino;
+	umode_t mode;
+	nlink_t nlink;
+	kuid_t uid;
+	kgid_t gid;
+	loff_t size;
+	const struct inode_operations *proc_iops;
+	const struct file_operations *proc_fops;
+	struct proc_dir_entry *next, *parent, *subdir;
+	void *data;
+	atomic_t count;		/* use count */
+	atomic_t in_use;	/* number of callers into module in progress; */
+				/* negative -> it's going away RSN */
+	struct completion *pde_unload_completion;
+	struct list_head pde_openers;   /* who did ->open, but not ->release */
+	spinlock_t pde_unload_lock; /* proc_fops checks and pde_users bumps */
+	u8 namelen;
+	char name[];
+};
 
 #ifdef CONFIG_PROC_FS
 
@@ -74,6 +94,35 @@ static inline struct proc_dir_entry *proc_net_mkdir(
 	struct net *net, const char *name, struct proc_dir_entry *parent)
 {
 	return proc_mkdir_data(name, 0, parent, net);
+}
+
+union proc_op {
+	int (*proc_get_link)(struct dentry *, struct path *);
+	int (*proc_read)(struct task_struct *task, char *page);
+	int (*proc_show)(struct seq_file *m,
+		struct pid_namespace *ns, struct pid *pid,
+		struct task_struct *task);
+};
+
+struct proc_inode {
+	struct pid *pid;
+	int fd;
+	union proc_op op;
+	struct proc_dir_entry *pde;
+	struct ctl_table_header *sysctl;
+	struct ctl_table *sysctl_entry;
+	struct proc_ns ns;
+	struct inode vfs_inode;
+};
+
+static inline struct proc_inode *PROC_I(const struct inode *inode)
+{
+	return container_of(inode, struct proc_inode, vfs_inode);
+}
+
+static inline struct proc_dir_entry *PDE(const struct inode *inode)
+{
+	return PROC_I(inode)->pde;
 }
 
 #endif /* _LINUX_PROC_FS_H */

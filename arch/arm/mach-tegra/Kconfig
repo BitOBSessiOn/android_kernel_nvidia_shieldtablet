@@ -352,6 +352,17 @@ config TEGRA_CPUQUIET
 	  high/low power CPU clusters automatically, corresponding to
 	  CPU frequency scaling.
 
+config TEGRA_SERIALIZE_DISABLE_IRQ
+	bool "controls disable irq sequence"
+	depends on ARCH_TEGRA_12x_SOC && !ARCH_TEGRA_13x_SOC
+	default y
+	help
+	  Need to serialize cpu irq disable sequence in
+	  stop_machine() primitive. On T124, it is found
+	  that we hit hang when all 4 cpu's parallel disable
+	  irq. This symbol is used as WAR to avoid such
+	  scenario on T124.
+
 config TEGRA_MC_EARLY_ACK
 	bool "Enable early acknowledgement from mermory controller"
 	depends on ARCH_TEGRA_3x_SOC || ARCH_TEGRA_11x_SOC

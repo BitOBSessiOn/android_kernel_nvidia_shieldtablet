@@ -1389,6 +1389,7 @@ u64 gk20a_vm_map(struct vm_gk20a *vm,
 	u64 ctag_map_win_size = 0;
 	u32 ctag_map_win_ctagline = 0;
 	struct vm_reserved_va_node *va_node = NULL;
+	u32 ctag_offset;
 
 	if (user_mapped && vm->userspace_managed &&
 	    !(flags & NVGPU_AS_MAP_BUFFER_FLAGS_FIXED_OFFSET)) {
@@ -1576,6 +1577,15 @@ u64 gk20a_vm_map(struct vm_gk20a *vm,
 	bfr.ctag_allocated_lines = comptags.allocated_lines;
 	bfr.ctag_user_mappable = comptags.user_mappable;
 
+	/*
+	 * Calculate comptag index for this mapping. Differs in
+	 * case of partial mapping.
+	 */
+	ctag_offset = comptags.offset;
+	if (ctag_offset)
+		ctag_offset += buffer_offset >>
+			       ilog2(g->ops.fb.compression_page_size(g));
+
 	/* update gmmu ptes */
 	map_offset = g->ops.mm.gmmu_map(vm, map_offset,
 					bfr.sgt,
@@ -1583,7 +1593,7 @@ u64 gk20a_vm_map(struct vm_gk20a *vm,
 					mapping_size,
 					bfr.pgsz_idx,
 					bfr.kind_v,
-					bfr.ctag_offset,
+					ctag_offset,
 					flags, rw_flag,
 					clear_ctags,
 					false,

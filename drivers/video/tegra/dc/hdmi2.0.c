@@ -1367,11 +1367,15 @@ static int tegra_hdmi_get_extended_vic(const struct tegra_dc_mode *mode)
 	mode_fixed = *mode;
 
 	if (mode_fixed.vmode & FB_VMODE_1000DIV1001) {
-		mode_fixed.pclk = (u64)mode_fixed.pclk * 1001 / 1000;
+		mode_fixed.pclk = DIV_ROUND_UP((u64)mode_fixed.pclk * 1001,
+							1000);
 		mode_fixed.vmode &= ~FB_VMODE_1000DIV1001;
 	}
 
 	tegra_dc_to_fb_videomode(&m, &mode_fixed);
+
+	/* only interlaced required for VIC identification */
+	m.vmode &= FB_VMODE_INTERLACED;
 
 	for (i = 1; i < HDMI_EXT_MODEDB_SIZE; i++) {
 		const struct fb_videomode *curr = &hdmi_ext_modes[i];

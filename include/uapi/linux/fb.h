@@ -310,7 +310,11 @@ struct fb_bitfield {
 #define FB_VMODE_IS_HDMI_EXT 	0x800000
 #define FB_VMODE_LIMITED_RANGE	0x10000000
 
-#define FB_VMODE_MASK		0x10e3ffff
+#define FB_VMODE_EDID_MASK	(FB_VMODE_1000DIV1001 | \
+				 FB_VMODE_IS_DETAILED | FB_VMODE_IS_CEA | \
+				 FB_VMODE_IS_HDMI_EXT)
+
+#define FB_VMODE_MASK		0x38ffff
 
 #define FB_VMODE_YWRAP		0x40000  /* ywrap instead of panning */
 #define FB_VMODE_SMOOTH_XPAN	0x80000  /* smooth xpan possible (internally used) */

@@ -24,6 +24,8 @@ static const struct hdmi_blacklist {
 } edid_blacklist[] = {
 	/* Bauhn ATVS65-815 65" 4K TV */
 	{ "CTV", 48, "Tempo 4K TV", TEGRA_EDID_QUIRK_NO_YUV },
+	/* Samsung JS8500 */
+	{ "SAM", 3077, "SAMSUNG",   TEGRA_EDID_QUIRK_370_BUMP_DOWN },
 };
 
 u32 tegra_edid_lookup_quirks(const char *manufacturer, u32 model,

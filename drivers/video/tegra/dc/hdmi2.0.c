@@ -1988,8 +1988,15 @@ static long tegra_dc_hdmi_setup_clk(struct tegra_dc *dc, struct clk *clk)
 	struct clk *parent_clk = clk_get(NULL,
 				dc->out->parent_clk ? : "pll_d2");
 #endif
+	struct tegra_hdmi *hdmi = tegra_dc_get_outdata(dc);
 
 	dc->mode.pclk = tegra_hdmi_get_pclk(&dc->mode);
+
+	if (dc->mode.pclk == 370878125 &&
+		tegra_edid_get_quirks(hdmi->edid) &
+			TEGRA_EDID_QUIRK_370_BUMP_DOWN) {
+		dc->mode.pclk = 370875000;
+	}
 
 	if (IS_ERR_OR_NULL(parent_clk)) {
 		dev_err(&dc->ndev->dev, "hdmi: parent clk get failed\n");

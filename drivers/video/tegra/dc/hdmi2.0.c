@@ -1996,6 +1996,30 @@ static long tegra_dc_hdmi_setup_clk(struct tegra_dc *dc, struct clk *clk)
 		tegra_edid_get_quirks(hdmi->edid) &
 			TEGRA_EDID_QUIRK_370_BUMP_DOWN) {
 		dc->mode.pclk = 370875000;
+	} else if (dc->mode.h_front_porch == 48 &&
+		dc->mode.h_active == 1920 &&
+		dc->mode.pclk == 138652800 &&
+		dc->mode.h_back_porch == 80 &&
+		dc->mode.v_sync_width == 5 &&
+		dc->mode.h_sync_width == 32 &&
+		dc->mode.stereo_mode == 0 &&
+		dc->mode.v_back_porch == 23 &&
+		dc->mode.v_active == 1080 &&
+		dc->mode.v_front_porch == 3 &&
+		dc->mode.vmode & FB_VMODE_IS_DETAILED) {
+		dc->mode.pclk = 138500000;
+	} else if (dc->mode.h_front_porch == 111 &&
+		dc->mode.h_active == 1280 &&
+		dc->mode.pclk == 74349000 &&
+		dc->mode.h_back_porch == 219 &&
+		dc->mode.v_sync_width == 5 &&
+		dc->mode.h_sync_width == 40 &&
+		dc->mode.stereo_mode == 0 &&
+		dc->mode.v_back_porch == 21 &&
+		dc->mode.v_active == 720 &&
+		dc->mode.v_front_porch == 5 &&
+		dc->mode.vmode & FB_VMODE_IS_DETAILED) {
+		dc->mode.pclk = 74250000;
 	}
 
 	if (IS_ERR_OR_NULL(parent_clk)) {

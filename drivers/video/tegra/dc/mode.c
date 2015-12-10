@@ -759,6 +759,27 @@ int tegra_dc_set_drm_mode(struct tegra_dc *dc,
 }
 EXPORT_SYMBOL(tegra_dc_set_drm_mode);
 
+/* returns exact pixel clock in Hz */
+static long tegra_get_precise_pclk_from_mode(struct tegra_dc_mode *mode)
+{
+	long h_total, v_total;
+	long refresh, pclk;
+
+	h_total = mode->h_active + mode->h_front_porch + mode->h_back_porch +
+		mode->h_sync_width;
+	v_total = mode->v_active + mode->v_front_porch + mode->v_back_porch +
+		mode->v_sync_width;
+	refresh = tegra_dc_calc_refresh(mode);
+	refresh = DIV_ROUND_CLOSEST(refresh, 1000);
+
+	pclk = h_total * v_total * refresh;
+
+	if (mode->vmode & FB_VMODE_1000DIV1001)
+		pclk = pclk * 1000 / 1001;
+
+	return pclk;
+}
+
 int tegra_dc_set_fb_mode(struct tegra_dc *dc,
 		const struct fb_videomode *fbmode, bool stereo_mode)
 {
@@ -768,6 +789,7 @@ int tegra_dc_set_fb_mode(struct tegra_dc *dc,
 		return -EINVAL;
 
 	memset(&mode, 0, sizeof(mode));
+
 	mode.pclk = PICOS2KHZ(fbmode->pixclock) * 1000;
 
 	mode.h_sync_width = fbmode->hsync_len;
@@ -815,6 +837,13 @@ int tegra_dc_set_fb_mode(struct tegra_dc *dc,
 
 	if (!(fbmode->sync & FB_SYNC_VERT_HIGH_ACT))
 		mode.flags |= TEGRA_DC_MODE_FLAG_NEG_V_SYNC;
+
+	/* In some cases, for instance in FB_VMODE_1000DIV1001
+	 * mode, the pclk from the fb pixclock is imprecise
+	 * due to the conversion between Hz -> ps. So compute
+	 * the pclk from all the components for a precise value
+	 */
+	mode.pclk = tegra_get_precise_pclk_from_mode(&mode);
 
 	return _tegra_dc_set_mode(dc, &mode);
 }

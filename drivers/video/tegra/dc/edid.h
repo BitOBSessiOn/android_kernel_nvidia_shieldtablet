@@ -111,6 +111,9 @@ enum {
 #define TEGRA_EDID_QUIRK_NO_YUV        (1 << 0)
 /* TV doesn't like 60/1.001, but is okay with 59.94 */
 #define TEGRA_EDID_QUIRK_370_BUMP_DOWN (1 << 1)
+/* Fix for our pclk rounding bug */
+#define TEGRA_EDID_QUIRK_FIX_138_50_MHZ (1 << 2)
+#define TEGRA_EDID_QUIRK_FIX_138_65_MHZ (1 << 3)
 
 struct tegra_edid {
 	struct tegra_edid_pvt	*data;

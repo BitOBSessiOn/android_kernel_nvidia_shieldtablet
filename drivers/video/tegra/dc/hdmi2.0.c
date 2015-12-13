@@ -2007,7 +2007,10 @@ static long tegra_dc_hdmi_setup_clk(struct tegra_dc *dc, struct clk *clk)
 		dc->mode.v_active == 1080 &&
 		dc->mode.v_front_porch == 3 &&
 		dc->mode.vmode & FB_VMODE_IS_DETAILED) {
-		dc->mode.pclk = 138500000;
+		if (tegra_edid_get_quirks(dc->edid) & TEGRA_EDID_QUIRK_FIX_138_50_MHZ)
+			dc->mode.pclk = 138500000;
+		else if (tegra_edid_get_quirks(dc->edid) & TEGRA_EDID_QUIRK_FIX_138_65_MHZ)
+			dc->mode.pclk = 138650000;
 	} else if (dc->mode.h_front_porch == 111 &&
 		dc->mode.h_active == 1280 &&
 		dc->mode.pclk == 74349000 &&

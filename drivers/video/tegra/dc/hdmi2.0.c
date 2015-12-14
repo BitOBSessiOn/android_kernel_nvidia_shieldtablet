@@ -1971,10 +1971,15 @@ static long tegra_hdmi_get_pclk(struct tegra_dc_mode *mode)
 	refresh = tegra_dc_calc_refresh(mode);
 	refresh = DIV_ROUND_CLOSEST(refresh, 1000);
 
-	pclk = h_total * v_total * refresh;
-
-	if (mode->vmode & FB_VMODE_1000DIV1001)
-		pclk = pclk * 1000 / 1001;
+	if (mode->vmode & FB_VMODE_1000DIV1001) {
+		refresh = refresh * 1000 * 1000 / 1001;
+		refresh = DIV_ROUND_CLOSEST(refresh, 10);
+		refresh = refresh * 10;
+		pclk = h_total * v_total * refresh / 1000;
+		pclk = DIV_ROUND_CLOSEST(pclk, 10000) * 10000;
+	} else {
+		pclk = h_total * v_total * refresh;
+	}
 
 	return pclk;
 }
@@ -1988,15 +1993,10 @@ static long tegra_dc_hdmi_setup_clk(struct tegra_dc *dc, struct clk *clk)
 	struct clk *parent_clk = clk_get(NULL,
 				dc->out->parent_clk ? : "pll_d2");
 #endif
-	struct tegra_hdmi *hdmi = tegra_dc_get_outdata(dc);
 
 	dc->mode.pclk = tegra_hdmi_get_pclk(&dc->mode);
 
-	if (dc->mode.pclk == 370878125 &&
-		tegra_edid_get_quirks(hdmi->edid) &
-			TEGRA_EDID_QUIRK_370_BUMP_DOWN) {
-		dc->mode.pclk = 370875000;
-	} else if (dc->mode.h_front_porch == 48 &&
+	if (dc->mode.h_front_porch == 48 &&
 		dc->mode.h_active == 1920 &&
 		dc->mode.pclk == 138652800 &&
 		dc->mode.h_back_porch == 80 &&

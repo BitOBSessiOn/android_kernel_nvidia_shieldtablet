@@ -50,6 +50,6 @@
 		interrupts = <TEGRA_GPIO(U, 5) 0x14>;
 		wlan-pwr-gpio = <&gpio TEGRA_GPIO(X, 7) 0>;
 		wlan-rst-gpio = <&gpio TEGRA_GPIO(CC, 5) 0>;
-		status = "okay";
+		status = "disabled";
 	};
 };

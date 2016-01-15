@@ -23,8 +23,6 @@
 #include <asm/cpufeature.h>
 #include <asm/alternative-asm.h>
 
-#include "proc-macros.S"
-
 /*
  *	v8_op_dcache_all op
  *

@@ -55,12 +55,24 @@ el1_sync:
 	mrs	x1, esr_el2
 	lsr	x1, x1, #26
 	cmp	x1, #0x16
-	b.ne	2f				// Not an HVC trap
+	b.ne	9f				// Not an HVC trap
 	cbz	x0, 1f
 	msr	vbar_el2, x0			// Set vbar_el2
-	b	2f
+	b	9f
 1:	mrs	x0, vbar_el2			// Return vbar_el2
-2:	eret
+	b       9f
+
+2:	cmp     x18, #HVC_CALL_FUNC
+	b.ne    9f
+	mov     x18, lr
+	mov     lr, x0
+	mov     x0, x1
+	mov     x1, x2
+	mov     x2, x3
+	blr     lr
+	mov     lr, x18
+
+9:	eret
 ENDPROC(el1_sync)
 
 .macro invalid_vector	label

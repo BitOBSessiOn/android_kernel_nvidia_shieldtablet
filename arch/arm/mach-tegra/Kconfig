@@ -308,6 +308,20 @@ config TEGRA_AVP_KERNEL_ON_SMMU
 config TEGRA_ARB_SEMAPHORE
 	bool
 
+config TEGRA_CPU_OVERCLOCK
+	bool "Enable Tegra K1 overclocking to 2,499 GHz"
+	default n
+	help
+	  This option enables Tegra K1 Overclocking to 2,499 GHz
+
+config TEGRA_GPU_OVERCLOCK
+	bool "Enable Tegra K1 GPU overclocking to 924 MHz"
+	default n
+	help
+	  This option enables Tegra K1 GPU Overclocking to 960 MHz.
+	  In order for this to work, make sure the edp-limit
+	  is set high enough.
+
 config TEGRA_THERMAL_THROTTLE
 	bool "Enable throttling of CPU speed on overtemp"
 	depends on CPU_FREQ
@@ -318,6 +332,8 @@ config TEGRA_THERMAL_THROTTLE
 
 config TEGRA_THERMAL_THROTTLE_EXACT_FREQ
 	bool "Use exact cpu frequency capping when thermal throttling"
+	depends on !TEGRA_CPU_OVERCLOCK
+	depends on !TEGRA_GPU_OVERCLOCK
 	depends on TEGRA_THERMAL_THROTTLE
 	default y if TEGRA_THERMAL_THROTTLE
 	default n

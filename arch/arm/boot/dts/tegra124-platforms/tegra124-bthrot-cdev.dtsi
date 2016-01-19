@@ -68,13 +68,15 @@
 		};
 		gpu_balanced {
 			cdev-type = "gpu-balanced";
-			num_states = <83>;
+			num_states = <85>;
 			cooling-min-state = <0>;
-			cooling-max-state = <83>;
+			cooling-max-state = <85>;
 			#cooling-cells = <2>;
 			status = "disabled";
 			throttle_table = <
 				/*CPU		GPU		C2BUS		C3BUS		SCLK		EMC	*/
+				2499000		804000		480000		756000		384000		924000
+				2397000		793400		480000		756000		384000		924000
 				2295000		782800		480000		756000		384000		924000
 				2269500		772200		480000		756000		384000		924000
 				2244000		761600		480000		756000		384000		924000
@@ -162,13 +164,15 @@
 		};
 		cpu_balanced {
 			cdev-type = "cpu-balanced";
-			num_states = <83>;
+			num_states = <85>;
 			cooling-min-state = <0>;
-			cooling-max-state = <83>;
+			cooling-max-state = <85>;
 			#cooling-cells = <2>;
 			status = "disabled";
 			throttle_table = <
 				/*CPU		GPU		C2BUS		C3BUS		SCLK		EMC	*/
+				2499000		4294967295	4294967295	4294967295	4294967295	4294967295
+				2397000		4294967295	4294967295	4294967295	4294967295	4294967295
 				2295000		4294967295	4294967295	4294967295	4294967295	4294967295
 				2269500		4294967295	4294967295	4294967295	4294967295	4294967295
 				2244000		4294967295	4294967295	4294967295	4294967295	4294967295

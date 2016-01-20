@@ -1571,15 +1571,15 @@ void gk20a_channel_update(struct channel_gk20a *c, int nr_completed)
 
 	trace_gk20a_channel_update(c->hw_chid);
 
-	wake_up(&c->submit_wq);
+	if (!c->g->power_on) /* shutdown case */
+		return;
 
+	wake_up(&c->submit_wq);
 	mutex_lock(&c->submit_lock);
 
-	if (c->g->power_on) {
-		/* gp_put check needs to be done inside submit lock */
-		update_gp_get(c->g, c);
-		check_gp_put(c->g, c);
-	}
+	/* gp_put check needs to be done inside submit lock */
+	update_gp_get(c->g, c);
+	check_gp_put(c->g, c);
 
 	mutex_lock(&c->jobs_lock);
 	list_for_each_entry_safe(job, n, &c->jobs, list) {

@@ -1,4 +1,4 @@
-/* Copyright (c) 2015, NVIDIA CORPORATION.  All rights reserved.
+/* Copyright (c) 2015-2016, NVIDIA CORPORATION.  All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -42,6 +42,8 @@
 			compatible = "capella,cm3217";
 			reg = <0x10>;
 			vdd-supply = <&palmas_smps9>;
+			light_dynamic_resolution_index_limit_low = <2>;
+			light_dynamic_resolution_index_limit_high = <10>;
 			light_threshold_lo = <4>;
 			light_threshold_hi = <4>;
 			light_uncalibrated_lo = <20>;

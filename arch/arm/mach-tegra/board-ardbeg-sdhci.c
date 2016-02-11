@@ -286,10 +286,6 @@ static int ardbeg_wifi_power(int on)
 {
 	pr_err("%s: %d\n", __func__, on);
 
-	gpio_set_value(ARDBEG_WLAN_PWR, !on);
-	gpio_set_value(ARDBEG_WLAN_RST, !on);
-	mdelay(100);
-
 	gpio_set_value(ARDBEG_WLAN_PWR, on);
 	gpio_set_value(ARDBEG_WLAN_RST, on);
 	mdelay(100);

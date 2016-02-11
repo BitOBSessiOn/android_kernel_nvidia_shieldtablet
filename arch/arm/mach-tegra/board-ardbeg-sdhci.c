@@ -436,10 +436,6 @@ static int __init ardbeg_wifi_prepower(void)
 		!of_machine_is_compatible("nvidia,bowmore") &&
 		!of_machine_is_compatible("nvidia,jetson-tk1"))
 		return 0;
-
-	/* allow power rails to stabilize before applying gpio */
-	mdelay(500);
-
 	ardbeg_wifi_power(1);
 
 	return 0;

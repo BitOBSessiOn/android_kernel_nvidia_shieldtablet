@@ -51,6 +51,8 @@ DECLARE_WAIT_QUEUE_HEAD(wq_worker);
 
 #define HDCP11_SRM_PATH "etc/hdcpsrm/hdcp1x.srm"
 
+#define RCVR_ID_LIST_SIZE		635
+
 #ifdef VERBOSE_DEBUG
 #define nvhdcp_vdbg(...)	\
 		printk("nvhdcp: " __VA_ARGS__)
@@ -866,6 +868,9 @@ static int tsec_hdcp_init(struct hdcp_context_t *hdcp_context)
 
 static int verify_vprime(struct tegra_nvhdcp *nvhdcp, u8 repeater)
 {
+	int i;
+	u8 *p;
+	u8 buf[RCVR_ID_LIST_SIZE];
 	struct hdcp_context_t *hdcp_context =
 		kmalloc(sizeof(*hdcp_context), GFP_KERNEL);
 	struct hdcp_verify_vprime_param verify_vprime_param;
@@ -887,13 +892,26 @@ static int verify_vprime(struct tegra_nvhdcp *nvhdcp, u8 repeater)
 		nvhdcp_err("srm read failed\n");
 		goto exit;
 	}
-	if (!repeater)
+	if (!repeater) {
+		nvhdcp->num_bksv_list = 1;
+		nvhdcp->bksv_list[0] = nvhdcp->b_ksv;
 		verify_vprime_param.reserved1[0] = TSEC_SRM_REVOCATION_CHECK;
+	}
 	/* get receiver id list into the buffer */
-	memcpy(hdcp_context->cpuvaddr_rcvr_id_list, nvhdcp->bksv_list,
-			(nvhdcp->num_bksv_list)*5);
+	p = buf;
+	for (i = 0; i < nvhdcp->num_bksv_list; i++) {
+		p[0] = (u8)(nvhdcp->bksv_list[i] & 0xff);
+		p[1] = (u8)((nvhdcp->bksv_list[i]>>8) & 0xff);
+		p[2] = (u8)((nvhdcp->bksv_list[i]>>16) & 0xff);
+		p[3] = (u8)((nvhdcp->bksv_list[i]>>24) & 0xff);
+		p[4] = (u8)((nvhdcp->bksv_list[i]>>32) & 0xff);
+		p += 5;
+	}
+	memcpy(hdcp_context->cpuvaddr_rcvr_id_list, buf,
+				(nvhdcp->num_bksv_list)*5);
 	memcpy(verify_vprime_param.vprime, nvhdcp->v_prime,
-			HDCP_SIZE_VPRIME_1X_8);
+					HDCP_SIZE_VPRIME_1X_8);
+
 	verify_vprime_param.trans_id.session_id = 0;
 	verify_vprime_param.is_ver_hdcp2x = 0; /* hdcp 1.x */
 	verify_vprime_param.bstatus = nvhdcp->b_status;
@@ -1131,22 +1149,6 @@ static void nvhdcp_downstream_worker(struct work_struct *work)
 		goto failure;
 	}
 
-	/* if repeater then get repeater info */
-	if (b_caps & BCAPS_REPEATER) {
-		e = get_repeater_info(nvhdcp);
-		if (e) {
-			nvhdcp_err("get repeater info failed\n");
-			goto failure;
-		}
-	}
-	repeater_val = b_caps & BCAPS_REPEATER;
-	/* V' verification */
-	e = verify_vprime(nvhdcp, repeater_val);
-	if (e) {
-		nvhdcp_err("Vprime verification failed\n");
-		goto failure;
-	}
-
 	tmp = tegra_hdmi_readl(hdmi, HDMI_NV_PDISP_RG_HDCP_CTRL);
 	tmp |= CRYPT_ENABLED;
 	if (b_caps & BCAPS_11) /* HDCP 1.1 ? */
@@ -1157,6 +1159,24 @@ static void nvhdcp_downstream_worker(struct work_struct *work)
 
 	nvhdcp->state = STATE_LINK_VERIFY;
 	nvhdcp_info("link verified!\n");
+
+	/* if repeater then get repeater info */
+	if (b_caps & BCAPS_REPEATER) {
+		e = get_repeater_info(nvhdcp);
+		if (e) {
+			nvhdcp_err("get repeater info failed\n");
+			goto failure;
+		}
+	}
+
+	repeater_val = b_caps & BCAPS_REPEATER;
+
+	/* V' verification */
+	e = verify_vprime(nvhdcp, repeater_val);
+	if (e) {
+		nvhdcp_err("Vprime verification failed\n");
+		goto failure;
+	}
 
 	while (1) {
 		if (!nvhdcp_is_plugged(nvhdcp))

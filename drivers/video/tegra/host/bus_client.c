@@ -1,7 +1,7 @@
 /*
  * Tegra Graphics Host Client Module
  *
- * Copyright (c) 2010-2015, NVIDIA Corporation. All rights reserved.
+ * Copyright (c) 2010-2016, NVIDIA Corporation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms and conditions of the GNU General Public License,
@@ -419,6 +419,7 @@ static int nvhost_init_error_notifier(struct nvhost_channel_userctx *ctx,
 {
 	struct dma_buf *dmabuf;
 	void *va;
+	u64 end = args->offset + sizeof(struct nvhost_notification);
 
 	/* are we releasing old reference? */
 	if (!args->mem) {
@@ -432,6 +433,12 @@ static int nvhost_init_error_notifier(struct nvhost_channel_userctx *ctx,
 	dmabuf = dma_buf_get(args->mem);
 	if (IS_ERR(dmabuf)) {
 		pr_err("%s: Invalid handle: %d\n", __func__, args->mem);
+		return -EINVAL;
+	}
+
+	if (end > dmabuf->size || end < sizeof(struct nvhost_notification)) {
+		dma_buf_put(dmabuf);
+		pr_err("%s: invalid offset\n", __func__);
 		return -EINVAL;
 	}
 

@@ -1299,6 +1299,18 @@ __nodev:
 #define JAR_AUDIO_REPORT_SIZE	233
 #define JAR_AUDIO_FRAME_SIZE	0x3A
 
+/* WAR for cypress controller pulling all buttons (HOME/BACK/SEARCH) low
+ * when in bootloader. If all buttons are found to be pressed simulatneously,
+ * ignore the hid report
+ */
+static bool atvr_jarvis_is_cypress_reset(u8 rdata)
+{
+	if (rdata == 0xe0)
+		return true;
+
+	return false;
+}
+
 static int atvr_jarvis_break_events(struct hid_device *hdev,
 				    struct hid_report *report,
 				    u8 *data, int size)
@@ -1322,8 +1334,13 @@ static int atvr_jarvis_break_events(struct hid_device *hdev,
 		if ((data[0] == JAR_BUTTON_REPORT_ID) &&
 		    (size >= JAR_BUTTON_REPORT_SIZE)) {
 			amount = JAR_BUTTON_REPORT_SIZE;
-			hid_report_raw_event(hdev, 0, data,
+			if (atvr_jarvis_is_cypress_reset(data[1])) {
+				pr_err("Cypress controller reset, disabling"
+				       "spurious key inputs \n");
+			} else {
+				hid_report_raw_event(hdev, 0, data,
 					     sizeof(amount), 0);
+			}
 		} else if ((data[0] == JAR_AUDIO_REPORT_ID) &&
 			   (size >= JAR_AUDIO_REPORT_SIZE)) {
 			u8 *frame = &data[1];

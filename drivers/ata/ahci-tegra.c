@@ -352,6 +352,8 @@
 /* SATA Port Registers*/
 #define PXSSTS						0X28
 
+#define TEGRA_AHCI_READ_LOG_EXT_NOENTRY			0x80
+
 #ifdef CONFIG_PM_GENERIC_DOMAINS_OF
 static struct of_device_id tegra_sata_pd[] = {
 	{ .compatible = "nvidia, tegra210-sata-pd", },
@@ -489,12 +491,15 @@ static int tegra_ahci_runtime_resume(struct device *dev);
 #define tegra_ahci_resume		NULL
 #endif
 
+static unsigned int tegra_ahci_qc_issue(struct ata_queued_cmd *qc);
+
 static struct scsi_host_template ahci_sht = {
 	AHCI_SHT("tegra-sata"),
 };
 
 static struct ata_port_operations tegra_ahci_ops = {
 	.inherits	= &ahci_ops,
+	.qc_issue	= tegra_ahci_qc_issue,
 #ifdef CONFIG_PM
 #ifdef CONFIG_TEGRA_SATA_IDLE_POWERGATE
 	.port_suspend           = tegra_ahci_port_suspend,
@@ -1018,6 +1023,29 @@ static void tegra_free_pexp_gpio(struct tegra_ahci_host_priv *tegra_hpriv)
 	if (gpio_is_valid(tegra_hpriv->pexp_gpio_low))
 		gpio_free(tegra_hpriv->pexp_gpio_low);
 
+}
+
+static unsigned int tegra_ahci_qc_issue(struct ata_queued_cmd *qc)
+{
+	if (qc->tf.command == ATA_CMD_READ_LOG_EXT &&
+			qc->tf.lbal == ATA_LOG_SATA_NCQ) {
+		u8 *buf =
+		(u8 *) page_address((const struct page *)qc->sg->page_link);
+
+		/*
+		 * Since our SATA Controller does not support this command
+		 * don't send this command to the drive instead complete
+		 * the function here and indicate to the upper layer
+		 * that there is no entries in the buffer.
+		 */
+		buf += qc->sg->offset;
+		buf[0] = TEGRA_AHCI_READ_LOG_EXT_NOENTRY;
+		qc->complete_fn(qc);
+
+		return 0;
+	}
+
+	return ahci_ops.qc_issue(qc);
 }
 
 static int tegra_ahci_controller_init(void *hpriv, int lp0)

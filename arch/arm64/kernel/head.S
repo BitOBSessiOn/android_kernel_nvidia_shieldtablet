@@ -34,6 +34,10 @@
 #include <asm/page.h>
 #include <asm/virt.h>
 
+#ifdef CONFIG_KEXEC_HARDBOOT
+#include <asm/kexec.h>
+#endif
+
 /*
  * swapper_pg_dir is the virtual address of the initial page table. We place
  * the page tables 3 * PAGE_SIZE below KERNEL_RAM_VADDR. The idmap_pg_dir has
@@ -119,6 +123,18 @@
 	.word	0				// reserved
 
 ENTRY(stext)
+#ifdef CONFIG_KEXEC_HARDBOOT
+	/* Check hardboot page for a kexec kernel */
+	ldr	x21, =KEXEC_HB_PAGE_ADDR
+	ldr	x22, [x21]
+	ldr	x23, =KEXEC_HB_PAGE_MAGIC
+	cmp	x22, x23
+	bne	not_hardboot_entry
+	str	xzr, [x21] /* zero out hardboot flag */
+	ldr	x18, [x21, #8]
+	br	x18
+not_hardboot_entry:
+#endif
 	mov	x21, x0				// x21=FDT
 	bl	el2_setup			// Drop to EL1, w20=cpu_boot_mode
 	bl	__calc_phys_offset		// x24=PHYS_OFFSET, x28=PHYS_OFFSET-PAGE_OFFSET

@@ -12,6 +12,11 @@
 #ifndef _ARM64_KEXEC_H
 #define _ARM64_KEXEC_H
 
+#ifdef CONFIG_KEXEC_HARDBOOT
+#define KEXEC_HB_PAGE_MAGIC 0x4a5db007
+#define KEXEC_HB_PAGE_ADDR 0xF3F00000
+#endif
+
 /* Maximum physical address we can use pages from */
 
 #define KEXEC_SOURCE_MEMORY_LIMIT (-1UL)

@@ -16,6 +16,10 @@
 #include <asm/page.h>
 #include <asm/sysreg.h>
 
+#ifdef CONFIG_KEXEC_HARDBOOT
+#define TEGRA_PMC_BASE                 0x7000E400
+#endif
+
 /*
  * arm64_relocate_new_kernel - Put a 2nd stage image in place and boot it.
  *
@@ -108,12 +112,35 @@ arm64_relocate_new_kernel:
 	dsb	nsh
 	isb
 
+#ifdef CONFIG_KEXEC_HARDBOOT
+	ldr	x0, arm64_kexec_hardboot
+	cbnz	x0, hardboot
+#endif
+
 	/* Start new image. */
 	mov	x0, xzr
 	mov	x1, xzr
 	mov	x2, xzr
 	mov	x3, xzr
 	br	x18
+
+#ifdef CONFIG_KEXEC_HARDBOOT
+hardboot:
+	/* Stash boot arguments in hardboot page:
+	 * 0: KEXEC_HB_PAGE_MAGIC
+	 * 8: kexec_kimage_start
+	 */
+	ldr	x0, =KEXEC_HB_PAGE_ADDR
+	str	x18, [x0, #8]
+	ldr	x1, =KEXEC_HB_PAGE_MAGIC
+	str	x1, [x0]
+
+	ldr	x0, =TEGRA_PMC_BASE
+	ldr     x1, [x0]
+	orr     x1, x1, #0x10
+	str     x1, [x0]
+loop:	b	loop
+#endif
 
 .ltorg
 
@@ -129,3 +156,10 @@ arm64_relocate_new_kernel:
 .globl arm64_relocate_new_kernel_size
 arm64_relocate_new_kernel_size:
 	.quad	.Lcopy_end - arm64_relocate_new_kernel
+
+/*
+ * arm64_kexec_hardboot - set to true if booting in hardboot mode
+ */
+.globl arm64_kexec_hardboot
+arm64_kexec_hardboot:
+	.quad	0x0

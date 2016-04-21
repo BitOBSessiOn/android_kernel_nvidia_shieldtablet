@@ -1010,6 +1010,8 @@ static int tegra_i2c_xfer_msg(struct tegra_i2c_dev *i2c_dev,
 	unsigned long timeout;
 	u32 cnfg;
 	u32 val;
+	/* Not more than 5 messages every minute */
+	static DEFINE_RATELIMIT_STATE(ratelimit, 60*HZ, 5);
 
 	if (msg->len == 0)
 		return -EINVAL;
@@ -1207,6 +1209,9 @@ static int tegra_i2c_xfer_msg(struct tegra_i2c_dev *i2c_dev,
 		return 0;
 
 	/* Prints errors */
+	if (!__ratelimit(&ratelimit))
+		goto skip_error_print;
+
 	if (i2c_dev->msg_err & I2C_ERR_UNKNOWN_INTERRUPT)
 		dev_warn(i2c_dev->dev, "unknown interrupt Add 0x%02x\n",
 				i2c_dev->msg_add);
@@ -1223,6 +1228,7 @@ static int tegra_i2c_xfer_msg(struct tegra_i2c_dev *i2c_dev,
 		dev_warn(i2c_dev->dev, "unexpected status to add 0x%x\n",
 				i2c_dev->msg_add);
 
+skip_error_print:
 	if ((i2c_dev->chipdata->timeout_irq_occurs_before_bus_inactive) &&
 		(i2c_dev->msg_err == I2C_ERR_NO_ACK)) {
 		/*

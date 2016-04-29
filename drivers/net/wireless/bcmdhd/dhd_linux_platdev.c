@@ -454,7 +454,6 @@ static void wifi_platform_free_country_code_map(wifi_adapter_info_t *adapter)
 }
 #endif
 
-extern u32 restrict_bw_20;
 static int wifi_plat_dev_drv_probe(struct platform_device *pdev)
 {
 	struct resource *resource;
@@ -462,7 +461,6 @@ static int wifi_plat_dev_drv_probe(struct platform_device *pdev)
 	struct device_node *node;
 	struct irq_data *irq_data;
 	u32 irq_flags;
-	void *ptr;
 
 	/* Android style wifi platform data device ("bcmdhd_wlan" or "bcm4329_wlan")
 	 * is kept for backward compatibility and supports only 1 adapter
@@ -477,13 +475,6 @@ static int wifi_plat_dev_drv_probe(struct platform_device *pdev)
 
 		adapter->wlan_pwr = of_get_named_gpio(node, "wlan-pwr-gpio", 0);
 		adapter->wlan_rst = of_get_named_gpio(node, "wlan-rst-gpio", 0);
-
-		/* Check if p2p GO bw needs to be restricted to 20Mhz */
-		if ((ptr = of_get_property(node, "restrict_bw_20", NULL)) != NULL) {
-			if (be32_to_cpu(ptr)) {
-				restrict_bw_20 = 1;
-			}
-		}
 
 		/* This is to get the irq for the OOB */
 		adapter->irq_num = platform_get_irq(pdev, 0);

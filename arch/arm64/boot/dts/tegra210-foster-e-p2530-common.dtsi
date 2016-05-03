@@ -265,7 +265,6 @@
 	};
 
 	bcmdhd_wlan {
-		restrict_bw_20 = <1>;
 		country_code_map {
 			CC1 {
 				iso_abbrev = "XV";

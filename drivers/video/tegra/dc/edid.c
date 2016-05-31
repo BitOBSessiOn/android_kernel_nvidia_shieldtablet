@@ -485,7 +485,7 @@ static int tegra_edid_parse_ext_block(const u8 *raw, int idx,
 				break;
 			case CEA_DATA_BLOCK_EXT_HDR:
 				edid->hdr_pckt_len = ptr[0] & 0x0f;
-				edid->hdr_present = true;
+				edid->hdr_present = ptr[2] & 0x04;
 				edid->hdr_eotf = ptr[2];
 				edid->hdr_static_metadata = ptr[3];
 				if (edid->hdr_pckt_len > 5) {

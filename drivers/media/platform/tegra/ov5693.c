@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2015, NVIDIA CORPORATION.  All rights reserved.
+ * Copyright (c) 2013-2016, NVIDIA CORPORATION.  All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms and conditions of the GNU General Public License,
@@ -35,6 +35,8 @@
 #include <media/camera_common.h>
 #include "cam_dev/camera_gpio.h"
 #include "nvc_utilities.h"
+#include <mach/io_dpd.h>
+
 
 #define OV5693_ID			0x5693
 #define OV5693_SENSOR_TYPE		NVC_IMAGER_TYPE_RAW
@@ -50,6 +52,18 @@
 #define OV5693_LENS_VIEW_ANGLE_V	60000	/* _INT2FLOAT_DIVISOR */
 #define OV5693_OTP_BUF_SIZE		16
 #define OV5693_FUSE_ID_SIZE		8
+
+static struct tegra_io_dpd csia_io = {
+	.name			= "CSIA",
+	.io_dpd_reg_index	= 0,
+	.io_dpd_bit		= 0,
+};
+
+static struct tegra_io_dpd csic_io = {
+	.name			= "CSIC",
+	.io_dpd_reg_index	= 1,
+	.io_dpd_bit		= 0xa,
+};
 
 static struct nvc_gpio_init ov5693_gpio[] = {
 	{ OV5693_GPIO_TYPE_PWRDN, GPIOF_OUT_INIT_LOW, "pwrdn", true, true, },
@@ -2781,6 +2795,15 @@ static int ov5693_platform_power_on(struct ov5693_power_rail *pw)
 	struct ov5693_info *info = container_of(pw, struct ov5693_info,
 						regulators);
 
+	switch (info->pdata->cap->sensor_nvc_interface) {
+	case NVC_IMAGER_SENSOR_INTERFACE_SERIAL_A:
+		tegra_io_dpd_disable(&csia_io);
+		break;
+	case NVC_IMAGER_SENSOR_INTERFACE_SERIAL_C:
+		tegra_io_dpd_disable(&csic_io);
+		break;
+	}
+
 	if (info->pdata->power_on)
 		return info->pdata->power_on(pw);
 
@@ -2816,6 +2839,14 @@ ov5693_avdd_fail:
 		regulator_disable(info->ext_vcm_vdd);
 
 ov5693_vcm_fail:
+	switch (info->pdata->cap->sensor_nvc_interface) {
+	case NVC_IMAGER_SENSOR_INTERFACE_SERIAL_A:
+		tegra_io_dpd_enable(&csia_io);
+		break;
+	case NVC_IMAGER_SENSOR_INTERFACE_SERIAL_C:
+		tegra_io_dpd_enable(&csic_io);
+		break;
+	}
 	pr_err("%s FAILED\n", __func__);
 	return err;
 }
@@ -2824,6 +2855,15 @@ static int ov5693_platform_power_off(struct ov5693_power_rail *pw)
 {
 	struct ov5693_info *info = container_of(pw, struct ov5693_info,
 						regulators);
+
+	switch (info->pdata->cap->sensor_nvc_interface) {
+	case NVC_IMAGER_SENSOR_INTERFACE_SERIAL_A:
+		tegra_io_dpd_enable(&csia_io);
+		break;
+	case NVC_IMAGER_SENSOR_INTERFACE_SERIAL_C:
+		tegra_io_dpd_enable(&csic_io);
+		break;
+	}
 
 	if (info->pdata->power_off)
 		return info->pdata->power_off(pw);
@@ -3556,8 +3596,6 @@ static struct ov5693_platform_data *ov5693_parse_dt(struct i2c_client *client)
 	struct device_node *np = client->dev.of_node;
 	struct ov5693_platform_data *pdata;
 	struct nvc_gpio_pdata *gpio_pdata = NULL;
-	const char *sname;
-	int ret;
 	int num;
 
 	dev_dbg(&client->dev, "%s: %s\n", __func__, np->full_name);
@@ -3582,29 +3620,10 @@ static struct ov5693_platform_data *ov5693_parse_dt(struct i2c_client *client)
 	pdata->static_info = (void *)(pdata->cap + 1);
 	gpio_pdata = (void *)(pdata->static_info + 1);
 
-	num = 0;
-	do {
-		ret = of_property_read_string_index(
-			np, "regulators", num, &sname);
-		if (ret < 0)
-			break;
-		switch (num) {
-		case 0:
-			pdata->regulators.avdd = sname;
-			pdata->regulators.dvdd = NULL;
-			pdata->regulators.dovdd = NULL;
-			break;
-		case 1:
-			pdata->regulators.dovdd = sname;
-			break;
-		case 2:
-			pdata->regulators.dvdd = sname;
-			break;
-		default:
-			break;
-		}
-		num++;
-	} while (num < 3);
+	/* regulator info */
+	of_property_read_string(np, "avdd", &pdata->regulators.avdd);
+	of_property_read_string(np, "dvdd", &pdata->regulators.dvdd);
+	of_property_read_string(np, "dovdd", &pdata->regulators.dovdd);
 
 	/* extra regulators info */
 	pdata->use_vcm_vdd = of_property_read_bool(np, "use-vcm-vdd");
@@ -3634,7 +3653,7 @@ static struct ov5693_platform_data *ov5693_parse_dt(struct i2c_client *client)
 	pdata->use_cam_gpio = of_property_read_bool(np, "cam,use-cam-gpio");
 
 	/* MCLK clock info */
-	of_property_read_string(np, "clocks", &pdata->mclk_name);
+	of_property_read_string(np, "mclk", &pdata->mclk_name);
 
 	/* get cap info */
 	nvc_imager_parse_caps(np, pdata->cap, pdata->static_info);
@@ -3655,8 +3674,7 @@ static int ov5693_probe(
 		.val_bits = 8,
 	};
 
-
-	dev_dbg(&client->dev, "%s\n", __func__);
+	dev_info(&client->dev, "%s\n", __func__);
 	info = devm_kzalloc(&client->dev, sizeof(*info), GFP_KERNEL);
 	if (info == NULL) {
 		dev_err(&client->dev, "%s: kzalloc error\n", __func__);

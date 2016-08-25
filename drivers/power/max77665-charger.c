@@ -165,7 +165,7 @@ int max77665_set_max_input_current(struct max77665_charger *charger, int mA)
 int max77665_get_max_input_current(struct max77665_charger *charger, int *mA)
 {
 	int ret;
-	uint32_t val;
+	uint32_t val = 0;
 
 	ret = max77665_read_reg(charger, MAX77665_CHG_CNFG_09, &val);
 	if (0 > ret)

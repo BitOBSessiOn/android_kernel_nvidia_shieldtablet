@@ -535,6 +535,13 @@ static int nvhost_ioctl_channel_submit(struct nvhost_channel_userctx *ctx,
 	u32 *local_class_ids = NULL;
 	int err, i;
 
+	if (num_cmdbufs < 0)
+		return -EINVAL;
+
+	if ((num_syncpt_incrs < 0) || (num_syncpt_incrs >
+		     nvhost_syncpt_nb_pts(&nvhost_get_host(ctx->pdev)->syncpt)))
+		return -EINVAL;
+
 	job = nvhost_job_alloc(ctx->ch,
 			num_cmdbufs,
 			num_relocs,
@@ -702,7 +709,15 @@ static int nvhost_ioctl_channel_submit(struct nvhost_channel_userctx *ctx,
 	 * syncpoint is used. */
 
 	if (args->flags & BIT(NVHOST_SUBMIT_FLAG_SYNC_FENCE_FD)) {
-		struct nvhost_ctrl_sync_fence_info pts[num_syncpt_incrs];
+		struct nvhost_ctrl_sync_fence_info *pts;
+
+		pts = kzalloc(num_syncpt_incrs *
+			      sizeof(struct nvhost_ctrl_sync_fence_info),
+			      GFP_KERNEL);
+		if (!pts) {
+			err = -ENOMEM;
+			goto fail;
+		}
 
 		for (i = 0; i < num_syncpt_incrs; i++) {
 			pts[i].id = job->sp[i].id;
@@ -711,6 +726,7 @@ static int nvhost_ioctl_channel_submit(struct nvhost_channel_userctx *ctx,
 
 		err = nvhost_sync_create_fence_fd(ctx->pdev,
 				pts, num_syncpt_incrs, "fence", &args->fence);
+		kfree(pts);
 		if (err)
 			goto fail;
 	} else if (num_syncpt_incrs == 1)

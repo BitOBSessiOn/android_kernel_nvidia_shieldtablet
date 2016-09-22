@@ -155,7 +155,7 @@ struct mpu_platform_data {
  *      in ms.  Note that the MPU HW only supports one delay
  *      time so the longest delay of all the MPU ports enabled
  *      is used.
- * - delay_us: The delay at which the read data is reported.
+ * - period_us: The period at which the read data is reported.
  * - shutdown_bypass: set if a connection to the host is needed
  *      when the system is shutdown.  The MPU API will be
  *      disabled as part of its shutdown but it will enable the
@@ -187,7 +187,7 @@ struct nvi_mpu_port {
 	u8 ctrl;
 	u8 data_out;
 	unsigned int delay_ms;
-	unsigned long delay_us;
+	unsigned int period_us;
 	bool shutdown_bypass;
 	void (*handler)(u8 *data, unsigned int len,
 			long long timestamp, void *ext_driver);
@@ -195,8 +195,18 @@ struct nvi_mpu_port {
 	signed char matrix[9];
 	enum secondary_slave_type type;
 	enum ext_slave_id id;
-	u8 asa[3];
-	int rate_scale;
+	u64 q30[3];
+};
+
+struct nvi_mpu_inf {
+	unsigned int period_us_min;
+	unsigned int period_us_max;
+	unsigned int fifo_reserve;
+	unsigned int fifo_max;
+	unsigned int dmp_rd_len_sts;	/* status length from DMP */
+	unsigned int dmp_rd_len_data;	/* data length from DMP */
+	bool dmp_rd_be_sts;		/* status endian from DMP */
+	bool dmp_rd_be_data;		/* data endian from DMP */
 };
 
 /**
@@ -243,7 +253,7 @@ struct nvi_mpu_port {
  *           - reg
  *           - ctrl
  *           - data_out if a write transaction
- * @param *val: pointer for read data.  Can be NULL if write.
+ * @param *data: pointer for read data.  Can be NULL if write.
  * @return int error
  *            Possible return value or errors are:
  *            - 0: device is connected to MPU.
@@ -276,7 +286,7 @@ int nvi_mpu_dev_valid(struct nvi_mpu_port *nmp, u8 *data);
  *           - ext_driver: this pointer is passed in handler for
  *                use by external driver.  This should be NULL
  *                if the port is configured for writes.
- * @return int error/port id
+ * @return int error/port ID
  *            if return >= 0 then this is the port ID.  The ID
  *            will have a value of 0 to 3 (HW has 4 ports).
  *            Possible errors are:
@@ -305,8 +315,9 @@ int nvi_mpu_port_alloc(struct nvi_mpu_port *nmp);
 int nvi_mpu_port_free(int port);
 
 /**
- * Enable/disable a port.
- * @param port
+ * Enable/disable ports.  Use of a port mask (port_mask) allows
+ * enabling/disabling multiple ports at the same time.
+ * @param port_mask
  * @param enable
  * @return int error
  *            Possible errors are:
@@ -316,7 +327,7 @@ int nvi_mpu_port_free(int port);
  *            - -EBUSY: MPU is busy with another request.
  *            - -EINVAL: Problem with input parameters.
  */
-int nvi_mpu_enable(int port, bool enable);
+int nvi_mpu_enable(unsigned int port_mask, bool enable);
 
 /**
  * Use to change the ports polling delay in milliseconds.
@@ -382,10 +393,10 @@ int nvi_mpu_batch(int port, unsigned int period_us, unsigned int timeout_us);
 int nvi_mpu_flush(int port);
 
 /**
- * batch fifo.
- * @param port
- * @param reserve
- * @param max
+ * nvi_mpu_info.  MPU/ICM populates the nvi_mpu_inf structure
+ * pointed to by inf.
+ * @param port used for reading
+ * @param ptr to nvi_mpu_inf structure.
  * @return int error
  *            Possible errors are:
  *            - -EAGAIN: MPU is not initialized yet.
@@ -394,7 +405,7 @@ int nvi_mpu_flush(int port);
  *            - -EBUSY: MPU is busy with another request.
  *            - -EINVAL: Problem with input parameters.
  */
-int nvi_mpu_fifo(int port, unsigned int *reserve, unsigned int *max);
+int nvi_mpu_info(int read_port, struct nvi_mpu_inf *inf);
 
 /**
  * Enable/disable the MPU bypass mode.  When enabled, the MPU

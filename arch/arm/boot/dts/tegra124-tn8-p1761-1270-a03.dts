@@ -1,7 +1,7 @@
 /*
  * arch/arm/boot/dts/tegra124-tn8-p1761-1270-a03.dts
  *
- * Copyright (c) 2014-2015, NVIDIA CORPORATION.  All rights reserved.
+ * Copyright (c) 2014-2016, NVIDIA CORPORATION.  All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -286,28 +286,6 @@
 		nvidia,vbus-oc-map = <4>;
 		nvidia,xcvr-setup-offset = <0>;
 		status = "disabled";
-	};
-
-	camera-pcl {
-		profiles {
-			ov5693_1: ov5693@2_0010 {
-				use_of_node = "yes";
-				dev_name = "ov5693";
-				num = <0>;
-				avdd_ov5693-supply = <&ldo4_reg>;
-				vdd_af1-supply = <&ldo7_reg>;
-				dovdd-supply = <&vdd_cam_af>;
-				reset-gpios = <&gpio TEGRA_GPIO(BB, 5) 0>;
-			};
-			ov5693_2: ov5693@2_0036 {
-				use_of_node = "yes";
-				dev_name = "ov5693";
-				num = <1>;
-				vana-supply = <&ldo7_reg>;
-				vif-supply = <&vdd_cam_af>;
-				cam2-gpios = <&gpio TEGRA_GPIO(BB, 6) 0>;
-			};
-		};
 	};
 };
 

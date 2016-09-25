@@ -13,6 +13,7 @@
 #include <linux/kernel.h>
 #include <linux/delay.h>
 #include "nvi.h"
+#include "nvi_dmp_mpu.h"
 
 enum inv_filter_e {
 	INV_FILTER_256HZ_NOLPF2 = 0,
@@ -265,6 +266,7 @@ static short index_of_key(u16 key)
 
 int inv_init_6050(struct nvi_state *st)
 {
+	unsigned int i;
 	int ret;
 	u8 prod_ver = 0x00, prod_rev = 0x00;
 	struct prod_rev_map_t *p_rev;
@@ -280,6 +282,12 @@ int inv_init_6050(struct nvi_state *st)
 		st->en_msk |= (1 << EN_LP);
 	else
 		st->en_msk &= ~(1 << EN_LP);
+	for (i = 0; i < st->hal->src_n; i++) {
+		st->src[i].period_us_min = st->hal->src[i].period_us_min;
+		st->src[i].period_us_max = st->hal->src[i].period_us_max;
+	}
+
+	/* INV crap starts here */
 	ret = nvi_i2c_r(st, 0, REG_PRODUCT_ID, 1, &prod_ver);
 	if (ret)
 		return ret;
@@ -343,10 +351,24 @@ int inv_init_6050(struct nvi_state *st)
 
 static int nvi_init_6500(struct nvi_state *st)
 {
+	unsigned int i;
+
 	if (st->snsr[DEV_ACC].cfg.thresh_hi > 0)
 		st->en_msk |= (1 << EN_LP);
 	else
 		st->en_msk &= ~(1 << EN_LP);
+	for (i = 0; i < st->hal->src_n; i++) {
+		st->src[i].period_us_min = st->hal->src[i].period_us_min;
+		st->src[i].period_us_max = st->hal->src[i].period_us_max;
+	}
+	st->snsr[DEV_SM].cfg.thresh_lo = MPU_SMD_THLD_INIT;
+	st->snsr[DEV_SM].cfg.thresh_hi = MPU_SMD_DELAY_N_INIT;
+	/* delay_us_min/max is ignored by NVS since this is a one-shot
+	 * sensor so we use them to store parameters.
+	 */
+	st->snsr[DEV_SM].cfg.delay_us_min = MPU_SMD_TIMER_INIT;
+	st->snsr[DEV_SM].cfg.delay_us_max = MPU_SMD_TIMER2_INIT;
+	st->snsr[DEV_SM].cfg.report_n = MPU_SMD_EXE_STATE_INIT;
 	return 0;
 }
 
@@ -1007,12 +1029,11 @@ static int nvi_pm_6500(struct nvi_state *st, u8 pm1, u8 pm2, u8 lp)
 	return ret;
 }
 
-static int nvi_en_acc(struct nvi_state *st)
+static int nvi_en_acc_mpu(struct nvi_state *st)
 {
 	u8 val;
 	int ret = 0;
 
-	st->snsr[DEV_ACC].matrix = true;
 	st->snsr[DEV_ACC].buf_n = 6;
 	ret |= nvi_i2c_wr_rc(st, &st->hal->reg->accel_config2, 0,
 			     __func__, &st->rc.accel_config2);
@@ -1022,11 +1043,11 @@ static int nvi_en_acc(struct nvi_state *st)
 	return ret;
 }
 
-static int nvi_en_gyr(struct nvi_state *st)
+static int nvi_en_gyr_mpu(struct nvi_state *st)
 {
 	u8 val = st->snsr[DEV_GYR].usr_cfg << 3;
 
-	st->snsr[DEV_GYR].matrix = true;
+	st->snsr[DEV_GYR].buf_n = 6;
 	return nvi_i2c_wr_rc(st, &st->hal->reg->gyro_config2, val,
 			     __func__, &st->rc.gyro_config2);
 }
@@ -1036,8 +1057,8 @@ struct nvi_fn nvi_fn_6050 = {
 	.init				= inv_init_6050, /* INV crappy code */
 	.st_acc				= nvi_st_acc_6050,
 	.st_gyr				= nvi_st_gyr_6050,
-	.en_acc				= nvi_en_acc,
-	.en_gyr				= nvi_en_gyr,
+	.en_acc				= nvi_en_acc_mpu,
+	.en_gyr				= nvi_en_gyr_mpu,
 };
 
 struct nvi_fn nvi_fn_6500 = {
@@ -1045,8 +1066,8 @@ struct nvi_fn nvi_fn_6500 = {
 	.init				= nvi_init_6500,
 	.st_acc				= nvi_st_acc_6500,
 	.st_gyr				= nvi_st_gyr_6500,
-	.en_acc				= nvi_en_acc,
-	.en_gyr				= nvi_en_gyr,
+	.en_acc				= nvi_en_acc_mpu,
+	.en_gyr				= nvi_en_gyr_mpu,
 };
 
 
@@ -1060,7 +1081,7 @@ static const unsigned int nvi_lpf_us_tbl[] = {
 	/* 200000, 5Hz */
 };
 
-static int nvi_period(struct nvi_state *st)
+static int nvi_src(struct nvi_state *st)
 {
 	u8 lpf;
 	u16 rate;
@@ -1068,10 +1089,6 @@ static int nvi_period(struct nvi_state *st)
 	int ret;
 
 	us = st->src[SRC_MPU].period_us_req;
-	if (us < st->hal->src[SRC_MPU].period_us_min)
-		us = st->hal->src[SRC_MPU].period_us_min;
-	if (us > st->hal->src[SRC_MPU].period_us_max)
-		us = st->hal->src[SRC_MPU].period_us_max;
 	/* calculate rate */
 	rate = us / 1000 - 1;
 	st->src[SRC_MPU].period_us_src = us;
@@ -1088,10 +1105,8 @@ static int nvi_period(struct nvi_state *st)
 			     __func__, &st->rc.gyro_config1);
 	ret |= nvi_aux_delay(st, __func__);
 	if (st->sts & (NVS_STS_SPEW_MSG | NVI_DBG_SPEW_MSG))
-		dev_info(&st->i2c->dev,
-			 "%s src[SRC_MPU]: period=%u timeout=%u err=%d\n",
-			 __func__, st->src[SRC_MPU].period_us_req,
-			 st->src_timeout_us[SRC_MPU], ret);
+		dev_info(&st->i2c->dev, "%s src[SRC_MPU]: period=%u err=%d\n",
+			 __func__, st->src[SRC_MPU].period_us_req, ret);
 	return ret;
 }
 
@@ -1108,7 +1123,7 @@ static const struct nvi_hal_src src[] = {
 					   (1 << DEV_AUX)),
 		.period_us_min		= 10000,
 		.period_us_max		= 256000,
-		.fn_period		= nvi_period,
+		.fn_period		= nvi_src,
 	},
 };
 
@@ -1399,7 +1414,6 @@ static const struct nvi_hal_reg nvi_hal_reg_6050 = {
 	},
 	.fifo_en			= {
 		.reg			= 0x23,
-		.dflt			= 0x4000,
 	},
 	.fifo_count_h			= {
 		.reg			= 0x72,
@@ -1524,6 +1538,8 @@ const struct nvi_hal nvi_hal_6050 = {
 	.dev[DEV_SM]			= &nvi_hal_dmp,
 	.dev[DEV_STP]			= &nvi_hal_dmp,
 	.dev[DEV_QTN]			= &nvi_hal_dmp,
+	.dev[DEV_GMR]			= &nvi_hal_dmp,
+	.dev[DEV_GYU]			= &nvi_hal_gyr,
 	.dev[DEV_AUX]			= &nvi_hal_aux,
 	.reg				= &nvi_hal_reg_6050,
 	.bit				= &nvi_hal_bit_6050,
@@ -1690,7 +1706,6 @@ static const struct nvi_hal_reg nvi_hal_reg_6500 = {
 	},
 	.fifo_en			= {
 		.reg			= 0x23,
-		.dflt			= 0x4000,
 	},
 	.fifo_count_h			= {
 		.reg			= 0x72,
@@ -1789,6 +1804,8 @@ const struct nvi_hal nvi_hal_6500 = {
 	.dev[DEV_SM]			= &nvi_hal_dmp,
 	.dev[DEV_STP]			= &nvi_hal_dmp,
 	.dev[DEV_QTN]			= &nvi_hal_dmp,
+	.dev[DEV_GMR]			= &nvi_hal_dmp,
+	.dev[DEV_GYU]			= &nvi_hal_gyr,
 	.dev[DEV_AUX]			= &nvi_hal_aux,
 	.reg				= &nvi_hal_reg_6500,
 	.bit				= &nvi_hal_bit_6050,
@@ -1809,6 +1826,8 @@ const struct nvi_hal nvi_hal_6515 = {
 	.dev[DEV_SM]			= &nvi_hal_dmp,
 	.dev[DEV_STP]			= &nvi_hal_dmp,
 	.dev[DEV_QTN]			= &nvi_hal_dmp,
+	.dev[DEV_GMR]			= &nvi_hal_dmp,
+	.dev[DEV_GYU]			= &nvi_hal_gyr,
 	.dev[DEV_AUX]			= &nvi_hal_aux,
 	.reg				= &nvi_hal_reg_6500,
 	.bit				= &nvi_hal_bit_6050,

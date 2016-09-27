@@ -2,8 +2,9 @@ GCOV_PROFILE := y
 
 subdir-ccflags-y := -Werror
 subdir-ccflags-y += -I$(srctree)/drivers/platform/tegra/include
+subdir-ccflags-y += -Idrivers/video/tegra/camera
 
-EXTRA_CFLAGS += -Idrivers/video/tegra/host
+EXTRA_CFLAGS += -Idrivers/video/tegra/host 
 
 ccflags-$(CONFIG_ADF_TEGRA) += -Idrivers/staging/android
 

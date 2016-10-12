@@ -629,8 +629,7 @@ static int gk20a_init_error_notifier(struct channel_gk20a *ch,
 
 	dmabuf = dma_buf_get(args->mem);
 
-	if (ch->error_notifier_ref)
-		gk20a_free_error_notifiers(ch);
+	gk20a_free_error_notifiers(ch);
 
 	if (IS_ERR(dmabuf)) {
 		pr_err("Invalid handle: %d\n", args->mem);
@@ -651,16 +650,23 @@ static int gk20a_init_error_notifier(struct channel_gk20a *ch,
 		return -ENOMEM;
 	}
 
-	/* set channel notifiers pointer */
-	ch->error_notifier_ref = dmabuf;
 	ch->error_notifier = va + args->offset;
 	ch->error_notifier_va = va;
 	memset(ch->error_notifier, 0, sizeof(struct nvgpu_notification));
+
+	/* set channel notifiers pointer */
+	mutex_lock(&ch->error_notifier_mutex);
+	ch->error_notifier_ref = dmabuf;
+	mutex_unlock(&ch->error_notifier_mutex);
+
 	return 0;
 }
 
 void gk20a_set_error_notifier(struct channel_gk20a *ch, __u32 error)
 {
+	bool notifier_set = false;
+
+	mutex_lock(&ch->error_notifier_mutex);
 	if (ch->error_notifier_ref) {
 		struct timespec time_data;
 		u64 nsec;
@@ -674,13 +680,18 @@ void gk20a_set_error_notifier(struct channel_gk20a *ch, __u32 error)
 		ch->error_notifier->info32 = error;
 		ch->error_notifier->status = 0xffff;
 
+		notifier_set = true;
+	}
+	mutex_unlock(&ch->error_notifier_mutex);
+
+	if (notifier_set)
 		gk20a_err(dev_from_gk20a(ch->g),
 		    "error notifier set to %d for ch %d", error, ch->hw_chid);
-	}
 }
 
 static void gk20a_free_error_notifiers(struct channel_gk20a *ch)
 {
+	mutex_lock(&ch->error_notifier_mutex);
 	if (ch->error_notifier_ref) {
 		dma_buf_vunmap(ch->error_notifier_ref, ch->error_notifier_va);
 		dma_buf_put(ch->error_notifier_ref);
@@ -688,6 +699,7 @@ static void gk20a_free_error_notifiers(struct channel_gk20a *ch)
 		ch->error_notifier = NULL;
 		ch->error_notifier_va = NULL;
 	}
+	mutex_unlock(&ch->error_notifier_mutex);
 }
 
 /* Returns delta of cyclic integers a and b. If a is ahead of b, delta
@@ -1977,6 +1989,7 @@ int gk20a_init_channel_support(struct gk20a *g, u32 chid)
 	mutex_init(&c->ioctl_lock);
 	mutex_init(&c->jobs_lock);
 	mutex_init(&c->submit_lock);
+	mutex_init(&c->error_notifier_mutex);
 	mutex_init(&c->sync_lock);
 	INIT_LIST_HEAD(&c->jobs);
 #if defined(CONFIG_GK20A_CYCLE_STATS)

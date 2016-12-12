@@ -839,6 +839,10 @@ static const struct {
 };
 #endif
 
+/* watchdog timer for disconnecting when fw is not associated for FW_ASSOC_WATCHDOG_TIME ms */
+uint32 fw_assoc_watchdog_ms = 0;
+bool fw_assoc_watchdog_started = 0;
+#define FW_ASSOC_WATCHDOG_TIME 10 * 1000 /* msec */
 
 static void wl_add_remove_pm_enable_work(struct bcm_cfg80211 *cfg, bool add_remove,
 	enum wl_handler_del_type type)
@@ -4981,6 +4985,8 @@ wl_cfg80211_get_station(struct wiphy *wiphy, struct net_device *dev,
 	s8 eabuf[ETHER_ADDR_STR_LEN];
 #endif
 	dhd_pub_t *dhd =  (dhd_pub_t *)(cfg->pub);
+	bool fw_assoc_state = FALSE;
+	u32 dhd_assoc_state = 0;
 	RETURN_EIO_IF_NOT_UP(cfg);
 	if (wl_get_mode_by_netdev(cfg, dev) == WL_MODE_AP) {
 		err = wldev_iovar_getbuf(dev, "sta_info", (struct ether_addr *)mac,
@@ -5027,14 +5033,41 @@ wl_cfg80211_get_station(struct wiphy *wiphy, struct net_device *dev,
 				}
 			}
 		}
-		if (!wl_get_drv_status(cfg, CONNECTED, dev) ||
-			(dhd_is_associated(dhd, NULL, &err) == FALSE)) {
+		dhd_assoc_state = wl_get_drv_status(cfg, CONNECTED, dev);
+		fw_assoc_state = dhd_is_associated(dhd, NULL, &err);
+		if (!dhd_assoc_state || !fw_assoc_state) {
 			WL_ERR(("NOT assoc\n"));
-			if (err == -ERESTARTSYS)
+			if (err == -ENODATA)
 				return err;
+			if (!dhd_assoc_state) {
+				WL_TRACE_HW4(("drv state is not connected \n"));
+			}
+			if (!fw_assoc_state) {
+				WL_TRACE_HW4(("fw state is not associated \n"));
+			}
+			/* Disconnect due to fw is not associated for FW_ASSOC_WATCHDOG_TIME ms.
+			* 'err == 0' of dhd_is_associated() and '!fw_assoc_state'
+			* means that BSSID is null.
+			*/
+			if (dhd_assoc_state && !fw_assoc_state && !err) {
+				if (!fw_assoc_watchdog_started) {
+					fw_assoc_watchdog_ms = OSL_SYSUPTIME();
+					fw_assoc_watchdog_started = TRUE;
+					WL_TRACE_HW4(("fw_assoc_watchdog_started \n"));
+				} else {
+					if (OSL_SYSUPTIME() - fw_assoc_watchdog_ms > FW_ASSOC_WATCHDOG_TIME) {
+						fw_assoc_watchdog_started = FALSE;
+						err = -ENODEV;
+						WL_TRACE_HW4(("fw is not associated for %d ms \n",
+							(OSL_SYSUPTIME() - fw_assoc_watchdog_ms)));
+						goto get_station_err;
+					}
+				}
+			}
 			err = -ENODEV;
 			return err;
 		}
+		fw_assoc_watchdog_started = FALSE;
 		curmacp = wl_read_prof(cfg, dev, WL_PROF_BSSID);
 		if (memcmp(mac, curmacp, ETHER_ADDR_LEN)) {
 			WL_ERR(("Wrong Mac address: "MACDBG" != "MACDBG"\n",

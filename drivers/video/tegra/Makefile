@@ -1,7 +1,8 @@
 GCOV_PROFILE := y
 
 subdir-ccflags-y := -Werror
-subdir-ccflags-y += -I$(srctree)/drivers/platform/tegra/include
+subdir-ccflags-y += -I$(srctree)/drivers/platform/tegra/include \
+	-I$(srctree)/drivers/video/tegra/camera
 
 EXTRA_CFLAGS += -Idrivers/video/tegra/host
 

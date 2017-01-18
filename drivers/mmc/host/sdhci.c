@@ -2,7 +2,7 @@
  *  linux/drivers/mmc/host/sdhci.c - Secure Digital Host Controller Interface driver
  *
  *  Copyright (C) 2005-2008 Pierre Ossman, All Rights Reserved.
- *  Copyright (C) 2012-2016, NVIDIA CORPORATION.  All rights reserved.
+ *  Copyright (C) 2012-2015, NVIDIA CORPORATION.  All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -1495,7 +1495,7 @@ static void sdhci_send_command(struct sdhci_host *host, struct mmc_command *cmd)
 	if ((cmd->opcode == MMC_SWITCH) &&
 		(((cmd->arg >> 16) & EXT_CSD_SANITIZE_START)
 		== EXT_CSD_SANITIZE_START))
-		timeout = 600;
+		timeout = 100;
 	else
 		timeout = 30;
 
@@ -3013,10 +3013,8 @@ static void sdhci_tasklet_card(unsigned long param)
 	struct sdhci_host *host = (struct sdhci_host *)param;
 
 	sdhci_card_event(host->mmc);
-	if (host->detect_resume)
-		mmc_detect_change(host->mmc, msecs_to_jiffies(700));
-	else
-		mmc_detect_change(host->mmc, msecs_to_jiffies(200));
+
+	mmc_detect_change(host->mmc, msecs_to_jiffies(200));
 }
 
 static void sdhci_tasklet_finish(unsigned long param)
@@ -3266,8 +3264,6 @@ static void sdhci_tuning_timer(unsigned long data)
 
 static void sdhci_cmd_irq(struct sdhci_host *host, u32 intmask)
 {
-	bool skip_dump = false;
-
 	BUG_ON(intmask == 0);
 
 	if (!host->cmd) {
@@ -3283,13 +3279,6 @@ static void sdhci_cmd_irq(struct sdhci_host *host, u32 intmask)
 	} else if (intmask & (SDHCI_INT_CRC | SDHCI_INT_END_BIT |
 			SDHCI_INT_INDEX)) {
 		host->cmd->error = -EILSEQ;
-
-		if (host->ops->skip_register_dump)
-			skip_dump = host->ops->skip_register_dump(host);
-		if (skip_dump &&
-			(intmask & SDHCI_INT_INDEX))
-			goto lbl_suppress_dump;
-
 		sdhci_dumpregs(host);
 		if (intmask & SDHCI_INT_INDEX)
 			pr_err("%s: Command INDEX error, intmask: %x Interface clock = %uHz\n",
@@ -3302,7 +3291,6 @@ static void sdhci_cmd_irq(struct sdhci_host *host, u32 intmask)
 			mmc_hostname(host->mmc), intmask, host->max_clk);
 	}
 
-lbl_suppress_dump:
 	if (host->cmd->error) {
 		if (MMC_CHECK_CMDQ_MODE(host))
 			tasklet_schedule(&host->finish_cmd_tasklet);
@@ -3662,11 +3650,7 @@ int sdhci_suspend_host(struct sdhci_host *host)
 	int ret;
 	struct mmc_host *mmc = host->mmc;
 
-	/* we need to enable clocks during
-	 * mmc_suspend_host for SDHCI_QUIRK2_NON_STD_RTPM
-	 */
-	if (!(host->quirks2 & SDHCI_QUIRK2_NON_STD_RTPM))
-		host->suspend_task = current;
+	host->suspend_task = current;
 
 	if (host->ops->platform_suspend)
 		host->ops->platform_suspend(host);
@@ -3697,10 +3681,10 @@ int sdhci_suspend_host(struct sdhci_host *host)
 
 		sdhci_enable_card_detection(host);
 
-		if (!(host->quirks2 & SDHCI_QUIRK2_NON_STD_RTPM))
-			host->suspend_task = NULL;
+		host->suspend_task = NULL;
 		return ret;
 	}
+
 	/* cancel delayed clk gate work */
 	if (host->quirks2 & SDHCI_QUIRK2_DELAYED_CLK_GATE)
 		cancel_delayed_work_sync(&host->delayed_clk_gate_wrk);
@@ -3739,8 +3723,7 @@ int sdhci_suspend_host(struct sdhci_host *host)
 				host->ops->set_clock(host, 0);
 	}
 
-	if (!(host->quirks2 & SDHCI_QUIRK2_NON_STD_RTPM))
-		host->suspend_task = NULL;
+	host->suspend_task = NULL;
 
 	return ret;
 }
@@ -4397,9 +4380,6 @@ out_dma_alloc:
 			mmc->f_min = host->max_clk / SDHCI_MAX_DIV_SPEC_300;
 	} else
 		mmc->f_min = host->max_clk / SDHCI_MAX_DIV_SPEC_200;
-	if (host->is_sdio)
-		printk_once("%s f_min=%d f_max=%d\n", mmc_hostname(mmc),
-			mmc->f_min, mmc->f_max);
 
 	host->timeout_clk =
 		(caps[0] & SDHCI_TIMEOUT_CLK_MASK) >> SDHCI_TIMEOUT_CLK_SHIFT;

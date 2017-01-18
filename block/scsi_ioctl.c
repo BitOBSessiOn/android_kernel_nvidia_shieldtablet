@@ -315,8 +315,8 @@ static int sg_io(struct request_queue *q, struct gendisk *bd_disk,
 		}
 
 	rq = blk_get_request(q, writing ? WRITE : READ, GFP_KERNEL);
-	if (IS_ERR(rq))
-		return PTR_ERR(rq);
+	if (!rq)
+		return -ENOMEM;
 
 	if (blk_fill_sghdr_rq(q, rq, hdr, mode)) {
 		blk_put_request(rq);
@@ -462,10 +462,6 @@ int sg_scsi_ioctl(struct request_queue *q, struct gendisk *disk, fmode_t mode,
 	}
 
 	rq = blk_get_request(q, in_len ? WRITE : READ, __GFP_WAIT);
-	if (IS_ERR(rq)) {
-		err = PTR_ERR(rq);
-		goto error_free_buffer;
-	}
 
 	cmdlen = COMMAND_SIZE(opcode);
 
@@ -537,9 +533,8 @@ int sg_scsi_ioctl(struct request_queue *q, struct gendisk *disk, fmode_t mode,
 	}
 	
 error:
-	blk_put_request(rq);
-error_free_buffer:
 	kfree(buffer);
+	blk_put_request(rq);
 	return err;
 }
 EXPORT_SYMBOL_GPL(sg_scsi_ioctl);
@@ -552,8 +547,6 @@ static int __blk_send_generic(struct request_queue *q, struct gendisk *bd_disk,
 	int err;
 
 	rq = blk_get_request(q, WRITE, __GFP_WAIT);
-	if (IS_ERR(rq))
-		return PTR_ERR(rq);
 	rq->cmd_type = REQ_TYPE_BLOCK_PC;
 	rq->timeout = BLK_DEFAULT_SG_TIMEOUT;
 	rq->cmd[0] = cmd;

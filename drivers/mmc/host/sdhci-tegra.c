@@ -1,7 +1,7 @@
 /*
  * Copyright (C) 2010 Google, Inc.
  *
- * Copyright (c) 2012-2015, NVIDIA CORPORATION.  All rights reserved.
+ * Copyright (c) 2012-2016, NVIDIA CORPORATION.  All rights reserved.
  *
  * This software is licensed under the terms of the GNU General Public
  * License version 2, as published by the Free Software Foundation, and
@@ -63,6 +63,10 @@
 #else
 #define SDHCI_TEGRA_DBG(stuff...)	do {} while (0)
 #endif
+
+#define SDIO_LOW_FREQ	500000 /* value above 400K chosen */
+#define SDIO_FIXED_FREQ	204000000 /* fixed SDIO clock of 204MHz desired */
+#define PLLP_ACTUAL_CLK_163_2_MHZ	163200000 /* SDIO 163.2MHz */
 
 #define SDHCI_VNDR_CLK_CTRL				0x100
 #define SDHCI_VNDR_CLK_CTRL_SDMMC_CLK			0x1
@@ -733,6 +737,9 @@ struct sdhci_tegra {
 	ktime_t timestamp;
 };
 
+/* Module Params declarations */
+static unsigned int en_boot_part_access;
+
 static unsigned int boot_volt_req_refcount;
 static DEFINE_MUTEX(tuning_mutex);
 
@@ -1392,6 +1399,7 @@ static irqreturn_t carddetect_irq(int irq, void *data)
 		 */
 		tegra_host->tuning_status = TUNING_STATUS_RETUNE;
 		tegra_host->force_retune = true;
+		sdhost->is_calibration_done = false;
 	}
 
 	tasklet_schedule(&sdhost->card_tasklet);
@@ -1797,6 +1805,12 @@ static void tegra_sdhci_set_clk_rate(struct sdhci_host *sdhci,
 	tegra_sdhci_clock_set_parent(sdhci, clk_rate);
 	clk_set_rate(pltfm_host->clk, clk_rate);
 	sdhci->max_clk = clk_get_rate(pltfm_host->clk);
+	/* log SDIO frequency if 163.2MHz */
+	if (sdhci->is_sdio &&
+		(sdhci->max_clk == PLLP_ACTUAL_CLK_163_2_MHZ))
+		printk_once("%s %s line=%d: clk rate requested=%d, actual=%d\n",
+			mmc_hostname(sdhci->mmc), __func__, __LINE__,
+			clk_rate, sdhci->max_clk);
 
 #ifdef CONFIG_MMC_FREQ_SCALING
 	/* Set the tap delay if tuning is done and dfs is enabled */
@@ -1851,6 +1865,9 @@ static void tegra_sdhci_set_clock(struct sdhci_host *sdhci, unsigned int clock)
 				vendor_trim_clear_sel_vreg(sdhci, true);
 			}
 		}
+		/* fix SDIO clock at 204MHz based on DT */
+		if (sdhci->is_sdio && (clock > SDIO_LOW_FREQ))
+			clock = SDIO_FIXED_FREQ;
 		tegra_sdhci_set_clk_rate(sdhci, clock);
 
 		if (tegra_host->emc_clk && (!tegra_host->is_sdmmc_emc_clk_on)) {
@@ -2105,9 +2122,9 @@ static void tegra_sdhci_do_calibration(struct sdhci_host *sdhci,
 	}
 	sdhci_writel(sdhci, val, SDMMC_AUTO_CAL_CONFIG);
 
-	/* Wait for 1us after auto calibration is enabled*/
+	/* Wait for 2us after auto calibration is enabled*/
 	if (soc_data->nvquirks2 & NVQUIRK2_ADD_DELAY_AUTO_CALIBRATION)
-		udelay(1);
+		udelay(2);
 
 	/* Wait until the calibration is done */
 	do {
@@ -2166,7 +2183,7 @@ static void tegra_sdhci_do_calibration(struct sdhci_host *sdhci,
 		}
 	}
 
-	if (tegra_host->plat->en_periodic_calib) {
+	if (tegra_host->plat->en_periodic_calib && tegra_host->card_present) {
 		tegra_host->timestamp = ktime_get();
 		sdhci->timestamp = ktime_get();
 		sdhci->is_calibration_done = true;
@@ -4095,6 +4112,7 @@ static int tegra_sdhci_suspend(struct sdhci_host *sdhci)
 		if (err)
 			dev_err(mmc_dev(sdhci->mmc),
 			"Regulators disable in suspend failed %d\n", err);
+		sdhci->is_calibration_done = false;
 	}
 	if (plat && gpio_is_valid(plat->cd_gpio)) {
 		if (!plat->cd_wakeup_incapable) {
@@ -4122,6 +4140,8 @@ static int tegra_sdhci_suspend(struct sdhci_host *sdhci)
 		pr_err("%s %s line=%d - null plat\n",
 			mmc_hostname(sdhci->mmc), __func__, __LINE__);
 
+	if (!err)
+		sdhci->detect_resume = 1;
 	return err;
 }
 
@@ -4183,6 +4203,7 @@ static int tegra_sdhci_resume(struct sdhci_host *sdhci)
 		tegra_sdhci_do_calibration(sdhci, signal_voltage);
 	}
 
+	sdhci->detect_resume = 0;
 	return 0;
 }
 
@@ -4942,6 +4963,7 @@ static int tegra_sdhci_reboot_notify(struct notifier_block *nb,
 	struct sdhci_tegra *tegra_host =
 		container_of(nb, struct sdhci_tegra, reboot_notify);
 	int err;
+	struct sdhci_host *sdhci = dev_get_drvdata(tegra_host->dev);
 
 	switch (event) {
 	case SYS_RESTART:
@@ -4951,6 +4973,11 @@ static int tegra_sdhci_reboot_notify(struct notifier_block *nb,
 		if (err)
 			pr_err("Disable regulator in reboot notify failed %d\n",
 				err);
+
+		/* disable runtime pm callbacks */
+		pr_debug("%s: %s line=%d\n",
+			mmc_hostname(sdhci->mmc), __func__, __LINE__);
+		sdhci_runtime_forbid(sdhci);
 
 		return NOTIFY_OK;
 	}
@@ -5140,6 +5167,44 @@ static void tegra_sdhci_set_max_pio_transfer_limits(struct sdhci_host *sdhci)
 	}
 }
 
+static bool sdhci_tegra_skip_register_dump(struct sdhci_host *host)
+{
+	struct sdhci_pltfm_host *pltfm_host = sdhci_priv(host);
+	struct sdhci_tegra *tegra_host = pltfm_host->priv;
+	const struct tegra_sdhci_platform_data *plat = tegra_host->plat;
+	unsigned int arg;
+	unsigned short cmd;
+	int i;
+	const unsigned short kso_cmd52_pattern = 0x341a;
+	const unsigned int arg_kso_patterns[] = {
+		0x92003e01,
+		0x12003e00
+	};
+
+	/*
+	 * Case: "bcm_sdio_suppress_kso_dump"
+	 * For KSO sleep mode error pattern in host register dump corresponding
+	 * to CMD52 case would be either of the following:
+		1)
+			Argument: 0x92003e01 (Write)
+			Cmd:     0x0000341a (CMD52 indicated by 0x34)
+		2)
+			Argument: 0x12003e00 (Read)
+			Cmd:     0x0000341a (CMD52 indicated by 0x34)
+	 *
+	 */
+	if (plat->bcm_sdio_suppress_kso_dump) {
+		arg = sdhci_readl(host, SDHCI_ARGUMENT);
+		cmd = sdhci_readw(host, SDHCI_COMMAND);
+		if (cmd == kso_cmd52_pattern) {
+			for (i = 0; i < ARRAY_SIZE(arg_kso_patterns); i++)
+				if (arg_kso_patterns[i] == arg)
+					return true;
+		}
+	}
+	return false;
+}
+
 static const struct sdhci_ops tegra_sdhci_ops = {
 	.get_ro     = tegra_sdhci_get_ro,
 	.get_cd     = tegra_sdhci_get_cd,
@@ -5173,6 +5238,7 @@ static const struct sdhci_ops tegra_sdhci_ops = {
 	.config_tap_delay	= tegra_sdhci_config_tap,
 	.is_tuning_done		= tegra_sdhci_is_tuning_done,
 	.get_max_pio_transfer_limits = tegra_sdhci_set_max_pio_transfer_limits,
+	.skip_register_dump	= sdhci_tegra_skip_register_dump,
 };
 
 static struct sdhci_pltfm_data sdhci_tegra11_pdata = {
@@ -5261,7 +5327,6 @@ static struct sdhci_tegra_soc_data soc_data_tegra21 = {
 	.nvquirks2 = NVQUIRK2_UPDATE_HW_TUNING_CONFG |
 		     NVQUIRK2_CONFIG_PWR_DET |
 		     NVQUIRK2_BROKEN_SD2_0_SUPPORT |
-		     NVQUIRK2_SELECT_SDR50_MODE |
 		     NVQUIRK2_ADD_DELAY_AUTO_CALIBRATION |
 		     NVQUIRK2_SET_PAD_E_INPUT_VOL |
 		     NVQUIRK2_DYNAMIC_TRIM_SUPPLY_SWITCH,
@@ -5301,7 +5366,6 @@ static struct sdhci_tegra_soc_data soc_data_tegra18 = {
 	.nvquirks2 = NVQUIRK2_UPDATE_HW_TUNING_CONFG |
 		     NVQUIRK2_CONFIG_PWR_DET |
 		     NVQUIRK2_BROKEN_SD2_0_SUPPORT |
-		     NVQUIRK2_SELECT_SDR50_MODE |
 		     NVQUIRK2_ADD_DELAY_AUTO_CALIBRATION |
 		     NVQUIRK2_DYNAMIC_TRIM_SUPPLY_SWITCH,
 };
@@ -5392,6 +5456,7 @@ static struct tegra_sdhci_platform_data *sdhci_tegra_dt_parse_pdata(
 	plat->en_io_trim_volt = of_property_read_bool(np,
 			"nvidia,en-io-trim-volt");
 	plat->is_emmc = of_property_read_bool(np, "nvidia,is-emmc");
+	plat->is_sdio = of_property_read_bool(np, "nvidia,is-sdio");
 	plat->is_sd_device = of_property_read_bool(np, "nvidia,sd-device");
 	plat->en_strobe =
 		of_property_read_bool(np, "nvidia,enable-strobe-mode");
@@ -5438,6 +5503,9 @@ static struct tegra_sdhci_platform_data *sdhci_tegra_dt_parse_pdata(
 			plat->gpios[i].label = label;
 		}
 	}
+	plat->bcm_sdio_suppress_kso_dump =
+		of_property_read_bool(np, "nvidia,bcm-sdio-suppress-kso-dump");
+
 	return plat;
 }
 
@@ -5686,6 +5754,8 @@ static int sdhci_tegra_probe(struct platform_device *pdev)
 			mmc_hostname(host->mmc));
 		plat->rtpm_type = RTPM_TYPE_DELAY_CG;
 	}
+	/* update sdio member in sdhci from plat */
+	host->is_sdio = plat->is_sdio;
 
 	/* sdio delayed clock gate quirk in sdhci_host used */
 	if (IS_RTPM_DELAY_CG(plat->rtpm_type))
@@ -6009,8 +6079,11 @@ static int sdhci_tegra_probe(struct platform_device *pdev)
 	if (plat->cd_wakeup_incapable)
 		host->mmc->pm_flags &= ~MMC_PM_IGNORE_PM_NOTIFY;
 
+	host->mmc->caps |= MMC_CAP_WAIT_WHILE_BUSY;
+
 	/* disable access to boot partitions */
-	host->mmc->caps2 |= MMC_CAP2_BOOTPART_NOACC;
+	if (!en_boot_part_access)
+		host->mmc->caps2 |= MMC_CAP2_BOOTPART_NOACC;
 
 	if (soc_data->nvquirks & NVQUIRK_ENABLE_HS200)
 		host->mmc->caps2 |= MMC_CAP2_HS200;
@@ -6090,9 +6163,6 @@ static int sdhci_tegra_probe(struct platform_device *pdev)
 	sdhci_tegra_error_stats_debugfs(host);
 	sdhci_tegra_misc_debugfs(host);
 	device_create_file(&pdev->dev, &dev_attr_cmd_state);
-
-	/* Enable async suspend/resume to reduce LP0 latency */
-	device_enable_async_suspend(&pdev->dev);
 
 	if (plat->power_off_rail) {
 		tegra_host->reboot_notify.notifier_call =
@@ -6218,7 +6288,10 @@ static struct platform_driver sdhci_tegra_driver = {
 };
 
 module_platform_driver(sdhci_tegra_driver);
+module_param(en_boot_part_access, uint, 0444);
 
 MODULE_DESCRIPTION("SDHCI driver for Tegra");
 MODULE_AUTHOR("Google, Inc.");
 MODULE_LICENSE("GPL v2");
+
+MODULE_PARM_DESC(en_boot_part_access, "Allow boot partitions access on device.");

@@ -42,7 +42,7 @@ bad-aaarch32-flags := -mgeneral-regs-only -mno-android -pg
 lc_flags = $(filter-out $(bad-aaarch32-flags),$(c_flags))
 
 # actual build commands
-CROSS32CC=arm-linux-androideabi-gcc
+CROSS32CC=$(ANDROID_BUILD_TOP)/prebuilts/gcc/linux-x86/arm/arm-eabi-4.8/bin/arm-eabi-gcc
 quiet_cmd_vdso32ld = VDSO32L $@
       cmd_vdso32ld = $(CROSS32CC) $(lc_flags) -Wl,-T $^ -o $@
 quiet_cmd_vdso32as = VDSO32A $@

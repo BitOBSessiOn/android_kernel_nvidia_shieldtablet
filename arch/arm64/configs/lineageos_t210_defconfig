@@ -1495,8 +1495,8 @@ CONFIG_BCMDHD_SDIO=y
 # CONFIG_BCMDYNAMIC is not set
 # CONFIG_BCM43241 is not set
 CONFIG_BCM4354=y
-CONFIG_BCMDHD_FW_PATH="/data/misc/wifi/firmware/fw_bcmdhd.bin"
-CONFIG_BCMDHD_NVRAM_PATH="/data/misc/wifi/firmware/nvram.txt"
+CONFIG_BCMDHD_FW_PATH="/system/vendor/firmware/fw_bcmdhd.bin"
+CONFIG_BCMDHD_NVRAM_PATH="/system/etc/nvram_4354.txt"
 CONFIG_BCMDHD_HW_OOB=y
 # CONFIG_DHD_USE_STATIC_BUF is not set
 CONFIG_DHD_USE_SCHED_SCAN=y

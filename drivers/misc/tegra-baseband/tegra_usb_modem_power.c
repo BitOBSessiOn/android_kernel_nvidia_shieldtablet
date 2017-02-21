@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2011-2015, NVIDIA CORPORATION.  All rights reserved.
+ * Copyright (c) 2011-2017, NVIDIA CORPORATION.  All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -173,6 +173,7 @@ struct tegra_usb_modem {
 	enum { AIRPLANE = 0, RAT_3G_LTE, RAT_2G} modem_power_state;
 	struct mutex modem_state_lock;
 	struct platform_device *modem_edp_pdev;
+	bool boot_gpio_changed; /* state changed during suspend */
 };
 
 
@@ -250,11 +251,21 @@ static irqreturn_t tegra_usb_modem_boot_thread(int irq, void *data)
 	int v = gpio_get_value(modem->pdata->boot_gpio);
 
 	dev_info(&modem->pdev->dev, "MDM_COLDBOOT %s\n", v ? "high" : "low");
-	if (modem->capability & TEGRA_USB_HOST_RELOAD)
-		if (!work_pending(&modem->host_load_work) &&
+
+	mutex_lock(&modem->lock);
+	if (modem->capability & TEGRA_USB_HOST_RELOAD) {
+		if (modem->system_suspend)
+			modem->boot_gpio_changed = true;
+		else if (!work_pending(&modem->host_load_work) &&
 		    !work_pending(&modem->host_unload_work))
 			queue_work(modem->wq, v ? &modem->host_load_work :
 				   &modem->host_unload_work);
+	}
+
+	/* USB disconnect maybe on going... */
+	if (modem->udev && modem->udev->state != USB_STATE_NOTATTACHED)
+		pr_warn("Device is not disconnected!\n");
+	mutex_unlock(&modem->lock);
 
 	/* hold wait lock to complete the enumeration */
 	wake_lock_timeout(&modem->wake_lock, WAKELOCK_TIMEOUT_FOR_USB_ENUM);
@@ -263,12 +274,6 @@ static irqreturn_t tegra_usb_modem_boot_thread(int irq, void *data)
 	if ((modem->capability & TEGRA_MODEM_CPU_BOOST) &&
 	     !work_pending(&modem->cpu_boost_work))
 		queue_work(modem->wq, &modem->cpu_boost_work);
-
-	/* USB disconnect maybe on going... */
-	mutex_lock(&modem->lock);
-	if (modem->udev && modem->udev->state != USB_STATE_NOTATTACHED)
-		pr_warn("Device is not disconnected!\n");
-	mutex_unlock(&modem->lock);
 
 	return IRQ_HANDLED;
 }
@@ -468,6 +473,7 @@ static int mdm_pm_notifier(struct notifier_block *notifier,
 {
 	struct tegra_usb_modem *modem =
 	    container_of(notifier, struct tegra_usb_modem, pm_notifier);
+	int v;
 
 	mutex_lock(&modem->lock);
 	if (!modem->udev) {
@@ -490,6 +496,12 @@ static int mdm_pm_notifier(struct notifier_block *notifier,
 		return NOTIFY_OK;
 	case PM_POST_SUSPEND:
 		modem->system_suspend = 0;
+		if (modem->boot_gpio_changed) {
+			v = gpio_get_value(modem->pdata->boot_gpio);
+			queue_work(modem->wq, v ? &modem->host_load_work :
+				   &modem->host_unload_work);
+			modem->boot_gpio_changed = false;
+		}
 		mutex_unlock(&modem->lock);
 		return NOTIFY_OK;
 	}
@@ -900,6 +912,8 @@ static int mdm_init(struct tegra_usb_modem *modem, struct platform_device *pdev)
 		modem->modem_edp_pdev = &modem_edp_device;
 		platform_device_register(modem->modem_edp_pdev);
 	}
+
+	modem->boot_gpio_changed = false;
 
 	/* start modem */
 	if (modem->ops && modem->ops->start)

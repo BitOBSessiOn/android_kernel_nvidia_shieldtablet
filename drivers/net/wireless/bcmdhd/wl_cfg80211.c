@@ -9104,6 +9104,11 @@ wl_notify_connect_status(struct bcm_cfg80211 *cfg, bcm_struct_cfgdev *cfgdev,
 					"event : %d, reason=%d from " MACDBG "\n",
 					ndev->name, event, ntoh32(e->reason),
 					MAC2STRDBG((u8*)(&e->addr))));
+				/* Re-set existing country code to restore channel
+				 * flags on DFS channels
+				 */
+				if ((cfg->channel >= 50) && (cfg->channel <= 144))
+					wldev_set_country(ndev, NULL, true, false);
 #ifdef CONFIG_BCMDHD_CUSTOM_SYSFS_TEGRA
 				if (ntoh32(e->reason) == 15) {
 					TEGRA_SYSFS_HISTOGRAM_STAT_INC(connect_fail_reason_15);

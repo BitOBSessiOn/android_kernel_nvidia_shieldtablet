@@ -14471,6 +14471,14 @@ const wl_event_msg_t *e, void *data)
 	chanspec_t chanspec;
 
 	WL_ERR(("%s\n", __FUNCTION__));
+	/* Re-set existing country code to restore channel
+	 * flags on DFS channels
+	 */
+	if (cfg && cfgdev) {
+		ndev = cfgdev_to_wlc_ndev(cfgdev, cfg);
+		wldev_set_country(ndev, NULL, true, false);
+	}
+
 	if (e->status)
 		return -1;
 	if (cfgdev) {

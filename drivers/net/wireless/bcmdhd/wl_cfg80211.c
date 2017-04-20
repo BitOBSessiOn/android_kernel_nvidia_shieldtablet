@@ -14710,7 +14710,7 @@ const wl_event_msg_t *e, void *data)
 	 * flags on DFS channels
 	 */
 	if (cfg && cfgdev) {
-		ndev = bcmcfg_to_prmry_wdev(cfg);
+		ndev = cfgdev_to_wlc_ndev(cfgdev, cfg);
 		wldev_set_country(ndev, NULL, true, false);
 	}
 

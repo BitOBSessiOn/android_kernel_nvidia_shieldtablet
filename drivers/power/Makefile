@@ -1,7 +1,7 @@
 GCOV_PROFILE := y
 
 ccflags-$(CONFIG_POWER_SUPPLY_DEBUG) := -DDEBUG
-subdir-ccflags-y += -Werror
+subdir-ccflags-y += -Werror -Wno-error=maybe-uninitialized
 
 power_supply-y				:= power_supply_core.o
 power_supply-$(CONFIG_SYSFS)		+= power_supply_sysfs.o

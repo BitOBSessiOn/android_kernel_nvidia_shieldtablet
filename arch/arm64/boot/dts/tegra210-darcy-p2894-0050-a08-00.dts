@@ -1,5 +1,5 @@
 /*
- * arch/arm64/boot/dts/tegra210-darcy-p2894-0050-a07-00.dts
+ * arch/arm64/boot/dts/tegra210-darcy-p2894-0050-a08-00.dts
  *
  * Copyright (c) 2016, NVIDIA CORPORATION.  All rights reserved.
  *
@@ -23,8 +23,8 @@
 #include "tegra210-platforms/tegra210-darcy-p2894-emc-a00.dtsi"
 #include "tegra210-platforms/tegra210-darcy-pcie.dtsi"
 #include "tegra210-platforms/tegra210-darcy-prods.dtsi"
-#include "tegra210-platforms/tegra210-darcy-power-dvfs-p2894-0050-a07.dtsi"
-#include "tegra210-platforms/tegra210-darcy-edp-p2894-0050-a07.dtsi"
+#include "tegra210-platforms/tegra210-darcy-power-dvfs-p2894-0050-a08.dtsi"
+#include "tegra210-platforms/tegra210-darcy-edp-p2894-0050-a08.dtsi"
 
 / {
 	model = "darcy";

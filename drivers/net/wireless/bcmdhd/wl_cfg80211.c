@@ -2,16 +2,16 @@
  * Linux cfg80211 driver
  *
  * Copyright (C) 1999-2015, Broadcom Corporation
- * 
+ *
  * Portions contributed by Nvidia
- * Copyright (C) 2015 NVIDIA Corporation. All rights reserved.
+ * Copyright (C) 2015-2017 NVIDIA Corporation. All rights reserved.
  *
  *      Unless you and Broadcom execute a separate written software license
  * agreement governing use of this software, this software is licensed to you
  * under the terms of the GNU General Public License version 2 (the "GPL"),
  * available at http://www.broadcom.com/licenses/GPLv2.php, with the
  * following added to such license:
- * 
+ *
  *      As a special exception, the copyright holders of this software give you
  * permission to link this software with independent modules, and to copy and
  * distribute the resulting executable under terms of your choice, provided that
@@ -19,7 +19,7 @@
  * the license of that module.  An independent module is a module which is not
  * derived from this software.  The special exception does not apply to any
  * modifications of the software.
- * 
+ *
  *      Notwithstanding the above, under no circumstances may you combine this
  * software in any way with any other Broadcom software provided under a license
  * other than the GPL, without Broadcom's express prior written consent.
@@ -839,6 +839,10 @@ static const struct {
 };
 #endif
 
+/* watchdog work for disconnecting when fw is not associated
+for FW_ASSOC_WATCHDOG_TIME ms */
+static struct fw_assoc_timeout_work fw_assoc_timeout;
+#define FW_ASSOC_WATCHDOG_TIME (5 * 1000) /* msec */
 
 static void wl_add_remove_pm_enable_work(struct bcm_cfg80211 *cfg, bool add_remove,
 	enum wl_handler_del_type type)
@@ -2426,6 +2430,15 @@ wl_run_escan(struct bcm_cfg80211 *cfg, struct net_device *ndev,
 			if (!wl_get_valid_channels(ndev, chan_buf, sizeof(chan_buf))) {
 				list = (wl_uint32_list_t *) chan_buf;
 				n_valid_chan = dtoh32(list->count);
+
+				if (n_valid_chan > WL_NUMCHANNELS) {
+					WL_ERR(("wrong n_valid_chan:%d\n",
+						n_valid_chan));
+					kfree(default_chan_list);
+					err = -EINVAL;
+					goto exit;
+				}
+
 				for (i = 0; i < num_chans; i++)
 				{
 					_freq = request->channels[i]->center_freq;
@@ -2446,6 +2459,9 @@ wl_run_escan(struct bcm_cfg80211 *cfg, struct net_device *ndev,
 						/* allows only supported channel on
 						*  current reguatory
 						*/
+						if (n_nodfs >= num_chans)
+							break;
+
 						if (channel == (dtoh32(list->element[j])))
 							default_chan_list[n_nodfs++] =
 								channel;
@@ -4169,6 +4185,10 @@ wl_cfg80211_connect(struct wiphy *wiphy, struct net_device *dev,
 	}
 
 	RETURN_EIO_IF_NOT_UP(cfg);
+	/* cancel FW assoc timeout watchdog if set */
+	if (fw_assoc_timeout.fw_assoc_watchdog_started) {
+		wl_fw_assoc_timeout_cancel();
+	}
 
 	/*
 	 * Cancel ongoing scan to sync up with sme state machine of cfg80211.
@@ -4471,6 +4491,12 @@ wl_cfg80211_disconnect(struct wiphy *wiphy, struct net_device *dev,
 	else
 		TEGRA_SYSFS_HISTOGRAM_STAT_INC(disconnect_rssi_high);
 #endif
+
+	/* cancel FW assoc timeout watchdog if set */
+	if (fw_assoc_timeout.fw_assoc_watchdog_started) {
+		wl_fw_assoc_timeout_cancel();
+	}
+
 	RETURN_EIO_IF_NOT_UP(cfg);
 	act = *(bool *) wl_read_prof(cfg, dev, WL_PROF_ACT);
 	curbssid = wl_read_prof(cfg, dev, WL_PROF_BSSID);
@@ -4966,6 +4992,50 @@ wl_cfg80211_config_default_mgmt_key(struct wiphy *wiphy,
 	return -EOPNOTSUPP;
 #endif /* MFP */
 }
+static void
+fw_assoc_timeout_fn(struct work_struct *work)
+{
+	struct delayed_work *delay_work = container_of(work, struct delayed_work, work);
+	struct fw_assoc_timeout_work *fw_assoc_timeout = container_of(delay_work, struct fw_assoc_timeout_work, delay_work);
+	struct bcm_cfg80211 *cfg = fw_assoc_timeout->cfg;
+	struct net_device *dev = fw_assoc_timeout->dev;
+	scb_val_t scbval;
+	s32  err = 0;
+	u8 *curbssid = wl_read_prof(cfg, dev, WL_PROF_BSSID);
+
+	scbval.val = WLAN_REASON_DEAUTH_LEAVING;
+	memcpy(&scbval.ea, curbssid, ETHER_ADDR_LEN);
+	scbval.val = htod32(scbval.val);
+	err = wldev_ioctl(dev, WLC_DISASSOC, &scbval, sizeof(scb_val_t), true);
+	if (err < 0) {
+		WL_ERR(("WLC_DISASSOC error %d\n", err));
+	}
+	memset(&cfg->last_roamed_addr, 0, ETHER_ADDR_LEN);
+	/* Disconnect due to zero BSSID */
+	wl_clr_drv_status(cfg, CONNECTED, dev);
+	cfg80211_disconnected(dev, 0, NULL, 0, GFP_KERNEL);
+	wl_link_down(cfg);
+	wl_init_prof(cfg, dev);
+	fw_assoc_timeout->fw_assoc_watchdog_started = FALSE;
+	WL_ERR(("force cfg80211_disconnected\n"));
+}
+
+void
+wl_fw_assoc_timeout_init()
+{
+	INIT_DELAYED_WORK(&fw_assoc_timeout.delay_work, fw_assoc_timeout_fn);
+	fw_assoc_timeout.fw_assoc_watchdog_started = FALSE;
+}
+
+void
+wl_fw_assoc_timeout_cancel()
+{
+	if (delayed_work_pending(&fw_assoc_timeout.delay_work)) {
+		WL_ERR(("cancelling fw_assoc_watchdog work\n"));
+		cancel_delayed_work_sync(&fw_assoc_timeout.delay_work);
+		fw_assoc_timeout.fw_assoc_watchdog_started = FALSE;
+	}
+}
 
 static s32
 wl_cfg80211_get_station(struct wiphy *wiphy, struct net_device *dev,
@@ -4981,6 +5051,8 @@ wl_cfg80211_get_station(struct wiphy *wiphy, struct net_device *dev,
 	s8 eabuf[ETHER_ADDR_STR_LEN];
 #endif
 	dhd_pub_t *dhd =  (dhd_pub_t *)(cfg->pub);
+	bool fw_assoc_state = FALSE;
+	u32 dhd_assoc_state = 0;
 	RETURN_EIO_IF_NOT_UP(cfg);
 	if (wl_get_mode_by_netdev(cfg, dev) == WL_MODE_AP) {
 		err = wldev_iovar_getbuf(dev, "sta_info", (struct ether_addr *)mac,
@@ -5027,13 +5099,37 @@ wl_cfg80211_get_station(struct wiphy *wiphy, struct net_device *dev,
 				}
 			}
 		}
-		if (!wl_get_drv_status(cfg, CONNECTED, dev) ||
-			(dhd_is_associated(dhd, NULL, &err) == FALSE)) {
-			WL_ERR(("NOT assoc\n"));
-			if (err == -ERESTARTSYS)
+		dhd_assoc_state = wl_get_drv_status(cfg, CONNECTED, dev);
+		fw_assoc_state = dhd_is_associated(dhd, NULL, &err);
+		if (!dhd_assoc_state || !fw_assoc_state) {
+			WL_ERR(("NOT assoc, error %d\n", err));
+			if (err == -ENODATA)
 				return err;
+			if (!dhd_assoc_state) {
+				WL_TRACE_HW4(("drv state is not connected \n"));
+			}
+			if (!fw_assoc_state) {
+				WL_TRACE_HW4(("fw state is not associated \n"));
+			}
+			/* Disconnect due to fw is not associated for FW_ASSOC_WATCHDOG_TIME ms.
+			* 'err == 0 or BCME_NOTASSOCIATED' of dhd_is_associated() and '!fw_assoc_state'
+			* means that BSSID is null.
+			*/
+			if (dhd_assoc_state && !fw_assoc_state && (err == BCME_NOTASSOCIATED || !err)) {
+				if (!fw_assoc_timeout.fw_assoc_watchdog_started) {
+					fw_assoc_timeout.dev = dev;
+					fw_assoc_timeout.cfg = cfg;
+					schedule_delayed_work(&fw_assoc_timeout.delay_work, msecs_to_jiffies(FW_ASSOC_WATCHDOG_TIME));
+					fw_assoc_timeout.fw_assoc_watchdog_started = TRUE;
+					WL_INFORM(("fw_assoc_watchdog_started\n"));
+				}
+			}
 			err = -ENODEV;
 			return err;
+		}
+		if (fw_assoc_timeout.fw_assoc_watchdog_started) {
+			WL_INFORM(("cancelling fw_assoc_watchdog work\n"));
+			wl_fw_assoc_timeout_cancel();
 		}
 		curmacp = wl_read_prof(cfg, dev, WL_PROF_BSSID);
 		if (memcmp(mac, curmacp, ETHER_ADDR_LEN)) {
@@ -9095,6 +9191,11 @@ wl_notify_connect_status(struct bcm_cfg80211 *cfg, bcm_struct_cfgdev *cfgdev,
 					"event : %d, reason=%d from " MACDBG "\n",
 					ndev->name, event, ntoh32(e->reason),
 					MAC2STRDBG((u8*)(&e->addr))));
+				/* Re-set existing country code to restore channel
+				 * flags on DFS channels
+				 */
+				if ((cfg->channel >= 50) && (cfg->channel <= 144))
+					wldev_set_country(ndev, NULL, true, false);
 #ifdef CONFIG_BCMDHD_CUSTOM_SYSFS_TEGRA
 				if (ntoh32(e->reason) == 15) {
 					TEGRA_SYSFS_HISTOGRAM_STAT_INC(connect_fail_reason_15);
@@ -9766,7 +9867,12 @@ wl_notify_pfn_status(struct bcm_cfg80211 *cfg, bcm_struct_cfgdev *cfgdev,
 {
 	struct net_device *ndev = NULL;
 
-	WL_ERR((">>> PNO Event\n"));
+	if (!data) {
+		WL_ERR(("Data is NULL!\n"));
+		return 0;
+	}
+
+	WL_DBG((">>> PNO Event\n"));
 
 	ndev = cfgdev_to_wlc_ndev(cfgdev, cfg);
 
@@ -11752,7 +11858,7 @@ s32 wl_cfg80211_attach(struct net_device *ndev, void *context)
 	cfg->btcoex_info = wl_cfg80211_btcoex_init(cfg->wdev->netdev);
 	if (!cfg->btcoex_info)
 		goto cfg80211_attach_out;
-#endif 
+#endif
 
 	g_bcm_cfg = cfg;
 
@@ -11762,7 +11868,8 @@ s32 wl_cfg80211_attach(struct net_device *ndev, void *context)
 	if (err)
 		goto cfg80211_attach_out;
 #endif
-#endif 
+#endif
+	wl_fw_assoc_timeout_init();
 
 	return err;
 
@@ -11780,13 +11887,14 @@ void wl_cfg80211_detach(void *para)
 	cfg = g_bcm_cfg;
 
 	WL_TRACE(("In\n"));
+	wl_fw_assoc_timeout_cancel();
 
 	wl_add_remove_pm_enable_work(cfg, FALSE, WL_HANDLER_DEL);
 
 #if defined(COEX_DHCP)
 	wl_cfg80211_btcoex_deinit();
 	cfg->btcoex_info = NULL;
-#endif 
+#endif
 
 	wl_setup_rfkill(cfg, FALSE);
 #ifdef DEBUGFS_CFG80211
@@ -14065,6 +14173,10 @@ wl_cfg80211_add_iw_ie(struct bcm_cfg80211 *cfg, struct net_device *ndev, s32 bss
 	if (ie_id != DOT11_MNG_INTERWORKING_ID)
 		return BCME_UNSUPPORTED;
 
+	if (data_len > IW_IES_MAX_BUF_LEN) {
+		WL_ERR(("wrong data_len:%d\n", data_len));
+		return BCME_BADARG;
+	}
 	/* Validate the pktflag parameter */
 	if ((pktflag & ~(VNDR_IE_BEACON_FLAG | VNDR_IE_PRBRSP_FLAG |
 	            VNDR_IE_ASSOCRSP_FLAG | VNDR_IE_AUTHRSP_FLAG |
@@ -14453,6 +14565,14 @@ const wl_event_msg_t *e, void *data)
 	chanspec_t chanspec;
 
 	WL_ERR(("%s\n", __FUNCTION__));
+	/* Re-set existing country code to restore channel
+	 * flags on DFS channels
+	 */
+	if (cfg && cfgdev) {
+		ndev = cfgdev_to_wlc_ndev(cfgdev, cfg);
+		wldev_set_country(ndev, NULL, true, false);
+	}
+
 	if (e->status)
 		return -1;
 	if (cfgdev) {

@@ -79,6 +79,7 @@ struct bq2419x_reg_info {
 struct bq2419x_chip {
 	struct device			*dev;
 	struct regmap			*regmap;
+	unsigned int			event_status;
 	int				irq;
 	int				gpio_otg_iusb;
 	int				wdt_refresh_timeout;
@@ -867,7 +868,7 @@ static irqreturn_t bq2419x_irq(int irq, void *data)
 
 	dev_info(bq2419x->dev, "%s() Irq %d status 0x%02x\n",
 		__func__, irq, val);
-
+	bq2419x->event_status = val;
 	if (val & BQ2419x_FAULT_BOOST_FAULT) {
 		bq_chg_err(bq2419x, "VBUS Overloaded\n");
 		ret = bq2419x_disable_otg_mode(bq2419x);
@@ -1304,6 +1305,40 @@ static ssize_t bq2419x_show_output_charging_current_values(struct device *dev,
 	return ret;
 }
 
+static ssize_t bq2419x_show_event_state(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct i2c_client *client = to_i2c_client(dev);
+	struct bq2419x_chip *bq2419x = i2c_get_clientdata(client);
+	unsigned int event_status;
+
+	event_status = bq2419x->event_status;
+
+	if (event_status & BQ2419x_FAULT_BOOST_FAULT)
+		return snprintf(buf, MAX_STR_PRINT, "VBUS Overloaded\n");
+	else if (event_status & BQ2419x_FAULT_WATCHDOG_FAULT)
+		return snprintf(buf, MAX_STR_PRINT, "WatchDog Expired\n");
+	else if (event_status & BQ2419x_FAULT_CHRG_FAULT_MASK) {
+		switch (event_status & BQ2419x_FAULT_CHRG_FAULT_MASK) {
+		case BQ2419x_FAULT_CHRG_INPUT:
+			return snprintf(buf, MAX_STR_PRINT,
+				"Input Fault"
+				"(VBUS OVP or VBAT<VBUS<3.8V)\n");
+		case BQ2419x_FAULT_CHRG_THERMAL:
+			return snprintf(buf, MAX_STR_PRINT,
+					"Thermal shutdown\n");
+		case BQ2419x_FAULT_CHRG_SAFTY:
+			return snprintf(buf, MAX_STR_PRINT,
+					"Safety timer expiration\n");
+		default:
+			break;
+		}
+	} else if (event_status & BQ2419x_FAULT_NTC_FAULT)
+		return snprintf(buf, MAX_STR_PRINT, "NCT Fault\n");
+
+	return snprintf(buf, MAX_STR_PRINT, "No Faults\n");
+}
+
 static DEVICE_ATTR(output_charging_current, (S_IRUGO | (S_IWUSR | S_IWGRP)),
 		bq2419x_show_output_charging_current,
 		bq2419x_set_output_charging_current);
@@ -1321,12 +1356,16 @@ static DEVICE_ATTR(charging_state, (S_IRUGO | (S_IWUSR | S_IWGRP)),
 static DEVICE_ATTR(input_cable_state, (S_IRUGO | (S_IWUSR | S_IWGRP)),
 		bq2419x_show_input_cable_state, bq2419x_set_input_cable_state);
 
+static DEVICE_ATTR(event_state, (S_IRUGO | (S_IWUSR | S_IWGRP)),
+		bq2419x_show_event_state, NULL);
+
 static struct attribute *bq2419x_attributes[] = {
 	&dev_attr_output_charging_current.attr,
 	&dev_attr_output_current_allowed_values.attr,
 	&dev_attr_input_charging_current_mA.attr,
 	&dev_attr_charging_state.attr,
 	&dev_attr_input_cable_state.attr,
+	&dev_attr_event_state.attr,
 	NULL
 };
 

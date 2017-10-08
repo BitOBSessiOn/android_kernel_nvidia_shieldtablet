@@ -179,10 +179,10 @@ static inline bool wq_has_sleeper(wait_queue_head_t *wq)
 	return waitqueue_active(wq);
 }
 
-static inline struct inode *d_inode(const struct dentry *dentry)
+/*static inline struct inode *d_inode(const struct dentry *dentry)
 {
 	return dentry->d_inode;
-}
+}*/
 
 static inline struct dentry *file_dentry(const struct file *file)
 {
@@ -498,8 +498,6 @@ enum {
 /* vector size for gang look-up from extent cache that consists of radix tree */
 #define EXT_TREE_VEC_SIZE	64
 
-#define MAX_DIR_RA_PAGES	4	/* maximum ra pages of dir */
-
 /* for in-memory extent cache entry */
 #define F2FS_MIN_EXTENT_LEN	64	/* minimum extent length */
 
@@ -810,19 +808,6 @@ struct flush_cmd_control {
 	struct llist_node *dispatch_list;	/* list for command dispatch */
 };
 
-struct flush_cmd {
-	struct completion wait;
-	struct llist_node llnode;
-	int ret;
-};
-
-struct flush_cmd_control {
-	struct task_struct *f2fs_issue_flush;	/* flush thread */
-	wait_queue_head_t flush_wait_queue;	/* waiting queue for wake-up */
-	struct llist_head issue_list;		/* list for command issue */
-	struct llist_node *dispatch_list;	/* list for command dispatch */
-};
-
 struct f2fs_sm_info {
 	struct sit_info *sit_info;		/* whole segment information */
 	struct free_segmap_info *free_info;	/* free segment information */
@@ -971,25 +956,6 @@ enum {
 	CP_TIME,
 	REQ_TIME,
 	MAX_TIME,
-};
-
-/*
- * Android sdcard emulation flags
- */
-#define F2FS_ANDROID_EMU_NOCASE		0x00000001
-
-struct f2fs_io_info {
-	enum page_type type;	/* contains DATA/NODE/META/META_FLUSH */
-	int rw;			/* contains R/RS/W/WS with REQ_META/REQ_PRIO */
-};
-
-#define is_read_io(rw)	(((rw) & 1) == READ)
-struct f2fs_bio_info {
-	struct f2fs_sb_info *sbi;	/* f2fs superblock */
-	struct bio *bio;		/* bios to merge */
-	sector_t last_block_in_bio;	/* last block number */
-	struct f2fs_io_info fio;	/* store buffered io info. */
-	struct rw_semaphore io_rwsem;	/* blocking op for bio */
 };
 
 struct f2fs_sb_info {

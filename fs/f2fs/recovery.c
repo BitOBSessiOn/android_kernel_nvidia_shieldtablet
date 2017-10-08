@@ -286,12 +286,6 @@ static int check_index_in_prev_nodes(struct f2fs_sb_info *sbi,
 	block_t bidx;
 	int i;
 
-	if (segno >= TOTAL_SEGS(sbi)) {
-		f2fs_msg(sbi->sb, KERN_ERR, "invalid segment number %u", segno);
-		if (f2fs_handle_error(sbi))
-			return -EIO;
-	}
-
 	sentry = get_seg_entry(sbi, segno);
 	if (!f2fs_test_bit(blkoff, sentry->cur_valid_map))
 		return 0;
@@ -559,7 +553,6 @@ next:
 
 int recover_fsync_data(struct f2fs_sb_info *sbi, bool check_only)
 {
-	struct curseg_info *curseg = CURSEG_I(sbi, CURSEG_WARM_NODE);
 	struct list_head inode_list;
 	struct list_head dir_list;
 	int err;
@@ -581,14 +574,11 @@ int recover_fsync_data(struct f2fs_sb_info *sbi, bool check_only)
 	err = find_fsync_dnodes(sbi, &inode_list, check_only);
 	if (err || list_empty(&inode_list))
 		goto out;
-	}
 
 	if (check_only) {
 		ret = 1;
 		goto out;
 	}
-
-	need_writecp = true;
 
 	need_writecp = true;
 

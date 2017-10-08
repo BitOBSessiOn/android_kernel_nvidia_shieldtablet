@@ -303,8 +303,6 @@ static int get_victim_by_default(struct f2fs_sb_info *sbi,
 
 	mutex_lock(&dirty_i->seglist_lock);
 
-	mutex_lock(&dirty_i->seglist_lock);
-
 	p.alloc_mode = alloc_mode;
 	select_policy(sbi, gc_type, type, &p);
 

@@ -104,35 +104,6 @@ static void __recover_inline_status(struct inode *inode, struct page *ipage)
 	return;
 }
 
-static void __get_inode_rdev(struct inode *inode, struct f2fs_inode *ri)
-{
-	if (S_ISCHR(inode->i_mode) || S_ISBLK(inode->i_mode) ||
-			S_ISFIFO(inode->i_mode) || S_ISSOCK(inode->i_mode)) {
-		if (ri->i_addr[0])
-			inode->i_rdev =
-				old_decode_dev(le32_to_cpu(ri->i_addr[0]));
-		else
-			inode->i_rdev =
-				new_decode_dev(le32_to_cpu(ri->i_addr[1]));
-	}
-}
-
-static void __set_inode_rdev(struct inode *inode, struct f2fs_inode *ri)
-{
-	if (S_ISCHR(inode->i_mode) || S_ISBLK(inode->i_mode)) {
-		if (old_valid_dev(inode->i_rdev)) {
-			ri->i_addr[0] =
-				cpu_to_le32(old_encode_dev(inode->i_rdev));
-			ri->i_addr[1] = 0;
-		} else {
-			ri->i_addr[0] = 0;
-			ri->i_addr[1] =
-				cpu_to_le32(new_encode_dev(inode->i_rdev));
-			ri->i_addr[2] = 0;
-		}
-	}
-}
-
 static int do_read_inode(struct inode *inode)
 {
 	struct f2fs_sb_info *sbi = F2FS_I_SB(inode);
@@ -330,7 +301,7 @@ int update_inode(struct inode *inode, struct page *node_page)
 	return set_page_dirty(node_page);
 }
 
-void update_inode_page(struct inode *inode)
+int update_inode_page(struct inode *inode)
 {
 	struct f2fs_sb_info *sbi = F2FS_I_SB(inode);
 	struct page *node_page;

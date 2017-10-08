@@ -14,7 +14,6 @@
 #include <linux/mpage.h>
 #include <linux/aio.h>
 #include <linux/writeback.h>
-#include <linux/mount.h>
 #include <linux/backing-dev.h>
 #include <linux/pagevec.h>
 #include <linux/blkdev.h>
@@ -1929,30 +1928,6 @@ repeat:
 		}
 	}
 	return 0;
-fail:
-	f2fs_write_failed(mapping, pos + len);
-	return err;
-}
-
-static int f2fs_write_end(struct file *file,
-			struct address_space *mapping,
-			loff_t pos, unsigned len, unsigned copied,
-			struct page *page, void *fsdata)
-{
-	struct inode *inode = page->mapping->host;
-
-	trace_f2fs_write_end(inode, pos, len, copied);
-
-	if (is_inode_flag_set(F2FS_I(inode), FI_ATOMIC_FILE))
-		get_page(page);
-	else
-		set_page_dirty(page);
-
-	if (pos + copied > i_size_read(inode)) {
-		i_size_write(inode, pos + copied);
-		mark_inode_dirty(inode);
-		update_inode_page(inode);
-	}
 
 fail:
 	f2fs_put_page(page, 1);

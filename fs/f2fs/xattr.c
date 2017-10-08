@@ -131,7 +131,7 @@ static int f2fs_xattr_advise_get(struct dentry *dentry, const char *name,
 {
 	struct inode *inode = d_inode(dentry);
 
-	if (!name || strcmp(name, "") != 0)
+	if (strcmp(name, "") != 0)
 		return -EINVAL;
 
 	if (buffer)

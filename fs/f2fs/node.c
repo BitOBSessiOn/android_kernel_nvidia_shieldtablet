@@ -600,11 +600,6 @@ int get_dnode_of_data(struct dnode_of_data *dn, pgoff_t index, int mode)
 		goto release_out;
 	}
 
-	if (!npage[0]) {
-		npage[0] = get_node_page(sbi, nids[0]);
-		if (IS_ERR(npage[0]))
-			return PTR_ERR(npage[0]);
-	}
 	parent = npage[0];
 	if (level != 0)
 		nids[1] = get_nid(parent, offset[0], true);
@@ -2250,9 +2245,6 @@ int recover_inode_page(struct f2fs_sb_info *sbi, struct page *page)
 	nid_t ino = ino_of_node(page);
 	struct node_info old_ni, new_ni;
 	struct page *ipage;
-	int err;
-
-	get_node_info(sbi, ino, &old_ni);
 
 	get_node_info(sbi, ino, &old_ni);
 
@@ -2291,34 +2283,7 @@ retry:
 	inc_valid_inode_count(sbi);
 	set_page_dirty(ipage);
 	f2fs_put_page(ipage, 1);
-	return err;
-}
-
-/*
- * ra_sum_pages() merge contiguous pages into one bio and submit.
- * these pre-readed pages are alloced in bd_inode's mapping tree.
- */
-static int ra_sum_pages(struct f2fs_sb_info *sbi, struct page **pages,
-				int start, int nrpages)
-{
-	struct inode *inode = sbi->sb->s_bdev->bd_inode;
-	struct address_space *mapping = inode->i_mapping;
-	int i, page_idx = start;
-	struct f2fs_io_info fio = {
-		.type = META,
-		.rw = READ_SYNC | REQ_META | REQ_PRIO
-	};
-
-	for (i = 0; page_idx < start + nrpages; page_idx++, i++) {
-		/* alloc page in bd_inode for reading node summary info */
-		pages[i] = grab_cache_page(mapping, page_idx);
-		if (!pages[i])
-			break;
-		f2fs_submit_page_mbio(sbi, pages[i], page_idx, &fio);
-	}
-
-	f2fs_submit_merged_bio(sbi, META, READ);
-	return i;
+	return 0;
 }
 
 int restore_node_summary(struct f2fs_sb_info *sbi,
@@ -2526,6 +2491,7 @@ static void __flush_nat_entry_set(struct f2fs_sb_info *sbi,
  */
 void flush_nat_entries(struct f2fs_sb_info *sbi, struct cp_control *cpc)
 {
+	struct f2fs_nm_info *nm_i = NM_I(sbi);
 	struct curseg_info *curseg = CURSEG_I(sbi, CURSEG_HOT_DATA);
 	struct f2fs_journal *journal = curseg->journal;
 	struct nat_entry_set *setvec[SETVEC_SIZE];

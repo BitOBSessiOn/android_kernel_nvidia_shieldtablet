@@ -247,7 +247,6 @@ static int f2fs_write_meta_page(struct page *page,
 	if (unlikely(f2fs_cp_error(sbi)))
 		goto redirty_out;
 
-	f2fs_wait_on_page_writeback(page, META);
 	write_meta_page(sbi, page);
 	dec_page_count(sbi, F2FS_DIRTY_META);
 
@@ -528,8 +527,7 @@ void add_orphan_inode(struct inode *inode)
 	update_inode_page(inode);
 }
 
-/* mode should be APPEND_INO or UPDATE_INO */
-bool exist_written_data(struct f2fs_sb_info *sbi, nid_t ino, int mode)
+void remove_orphan_inode(struct f2fs_sb_info *sbi, nid_t ino)
 {
 	/* remove orphan entry from orphan list */
 	__remove_ino_entry(sbi, ino, ORPHAN_INO);
@@ -580,7 +578,7 @@ static int recover_orphan_inode(struct f2fs_sb_info *sbi, nid_t ino)
 	return 0;
 }
 
-void recover_orphan_inodes(struct f2fs_sb_info *sbi)
+int recover_orphan_inodes(struct f2fs_sb_info *sbi)
 {
 	block_t start_blk, orphan_blocks, i, j;
 	int err;
@@ -1158,9 +1156,6 @@ static int do_checkpoint(struct f2fs_sb_info *sbi, struct cp_control *cpc)
 
 	/* update ckpt flag for checkpoint */
 	update_ckpt_flags(sbi, cpc);
-
-	if (sbi->need_fsck)
-		set_ckpt_flags(ckpt, CP_FSCK_FLAG);
 
 	/* update SIT/NAT bitmap */
 	get_sit_bitmap(sbi, __bitmap_ptr(sbi, SIT_BITMAP));

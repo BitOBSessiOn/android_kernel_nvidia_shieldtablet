@@ -57,13 +57,6 @@ struct node_info {
 	unsigned char flag;	/* for node information bits */
 };
 
-enum {
-	IS_CHECKPOINTED,	/* is it checkpointed before? */
-	HAS_FSYNCED_INODE,	/* is the inode fsynced before? */
-	HAS_LAST_FSYNC,		/* has the latest node fsync mark? */
-	IS_DIRTY,		/* this nat entry is dirty? */
-};
-
 struct nat_entry {
 	struct list_head list;	/* for clean or dirty nat list */
 	struct node_info ni;	/* in-memory node information */
@@ -104,30 +97,6 @@ static inline bool get_nat_flag(struct nat_entry *ne, unsigned int type)
 {
 	unsigned char mask = 0x01 << type;
 	return ne->ni.flag & mask;
-}
-
-static inline void nat_reset_flag(struct nat_entry *ne)
-{
-	/* these states can be set only after checkpoint was done */
-	set_nat_flag(ne, IS_CHECKPOINTED, true);
-	set_nat_flag(ne, HAS_FSYNCED_INODE, false);
-	set_nat_flag(ne, HAS_LAST_FSYNC, true);
-}
-
-static inline void set_nat_flag(struct nat_entry *ne,
-				unsigned int type, bool set)
-{
-	unsigned char mask = 0x01 << type;
-	if (set)
-		ne->flag |= mask;
-	else
-		ne->flag &= ~mask;
-}
-
-static inline bool get_nat_flag(struct nat_entry *ne, unsigned int type)
-{
-	unsigned char mask = 0x01 << type;
-	return ne->flag & mask;
 }
 
 static inline void nat_reset_flag(struct nat_entry *ne)

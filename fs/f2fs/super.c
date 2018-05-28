@@ -721,16 +721,6 @@ static void f2fs_dirty_inode(struct inode *inode, int flags)
 	f2fs_inode_dirtied(inode, false);
 }
 
-/*
- * f2fs_dirty_inode() is called from __mark_inode_dirty()
- *
- * We should call set_dirty_inode to write the dirty inode through write_inode.
- */
-static void f2fs_dirty_inode(struct inode *inode, int flags)
-{
-	set_inode_flag(F2FS_I(inode), FI_DIRTY_INODE);
-}
-
 static void f2fs_i_callback(struct rcu_head *head)
 {
 	struct inode *inode = container_of(head, struct inode, i_rcu);
@@ -944,12 +934,6 @@ static int f2fs_show_options(struct seq_file *seq, struct dentry *root)
 	else
 		seq_puts(seq, ",noacl");
 #endif
-	if (test_opt(sbi, ERRORS_PANIC))
-		seq_puts(seq, ",errors=panic");
-	else if (test_opt(sbi, ERRORS_RECOVER))
-		seq_puts(seq, ",errors=recover");
-	else
-		seq_puts(seq, ",errors=continue");
 	if (test_opt(sbi, DISABLE_EXT_IDENTIFY))
 		seq_puts(seq, ",disable_ext_identify");
 	if (test_opt(sbi, INLINE_DATA))
@@ -1198,100 +1182,6 @@ restore_opts:
 #ifdef CONFIG_F2FS_FAULT_INJECTION
 	sbi->fault_info = ffi;
 #endif
-	return err;
-}
-
-static int segment_info_open_fs(struct inode *inode, struct file *file)
-{
-	return single_open(file, segment_info_seq_show,
-					PDE_DATA(inode));
-}
-
-static const struct file_operations f2fs_seq_segment_info_fops = {
-	.owner = THIS_MODULE,
-	.open = segment_info_open_fs,
-	.read = seq_read,
-	.llseek = seq_lseek,
-	.release = single_release,
-};
-
-static int f2fs_remount(struct super_block *sb, int *flags, char *data)
-{
-	struct f2fs_sb_info *sbi = F2FS_SB(sb);
-	struct f2fs_mount_info org_mount_opt;
-	int err, active_logs;
-	bool need_restart_gc = false;
-	bool need_stop_gc = false;
-
-	sync_filesystem(sb);
-
-	/*
-	 * Save the old mount options in case we
-	 * need to restore them.
-	 */
-	org_mount_opt = sbi->mount_opt;
-	active_logs = sbi->active_logs;
-
-	sbi->mount_opt.opt = 0;
-	sbi->active_logs = NR_CURSEG_TYPE;
-
-	/* parse mount options */
-	err = parse_options(sb, data);
-	if (err)
-		goto restore_opts;
-
-	/*
-	 * Previous and new state of filesystem is RO,
-	 * so skip checking GC and FLUSH_MERGE conditions.
-	 */
-	if (f2fs_readonly(sb) && (*flags & MS_RDONLY))
-		goto skip;
-
-	/*
-	 * We stop the GC thread if FS is mounted as RO
-	 * or if background_gc = off is passed in mount
-	 * option. Also sync the filesystem.
-	 */
-	if ((*flags & MS_RDONLY) || !test_opt(sbi, BG_GC)) {
-		if (sbi->gc_thread) {
-			stop_gc_thread(sbi);
-			f2fs_sync_fs(sb, 1);
-			need_restart_gc = true;
-		}
-	} else if (test_opt(sbi, BG_GC) && !sbi->gc_thread) {
-		err = start_gc_thread(sbi);
-		if (err)
-			goto restore_opts;
-		need_stop_gc = true;
-	}
-
-	/*
-	 * We stop issue flush thread if FS is mounted as RO
-	 * or if flush_merge is not passed in mount option.
-	 */
-	if ((*flags & MS_RDONLY) || !test_opt(sbi, FLUSH_MERGE)) {
-		destroy_flush_cmd_control(sbi);
-	} else if (test_opt(sbi, FLUSH_MERGE) && !SM_I(sbi)->cmd_control_info) {
-		err = create_flush_cmd_control(sbi);
-		if (err)
-			goto restore_gc;
-	}
-skip:
-	/* Update the POSIXACL Flag */
-	 sb->s_flags = (sb->s_flags & ~MS_POSIXACL) |
-		(test_opt(sbi, POSIX_ACL) ? MS_POSIXACL : 0);
-	return 0;
-restore_gc:
-	if (need_restart_gc) {
-		if (start_gc_thread(sbi))
-			f2fs_msg(sbi->sb, KERN_WARNING,
-				"background gc thread is stop");
-	} else if (need_stop_gc) {
-		stop_gc_thread(sbi);
-	}
-restore_opts:
-	sbi->mount_opt = org_mount_opt;
-	sbi->active_logs = active_logs;
 	return err;
 }
 
@@ -1969,9 +1859,6 @@ try_onemore:
 	valid_super_block = -1;
 	recovery = 0;
 
-	f2fs_msg(sb, KERN_INFO, "mounting..");
-
-try_onemore:
 	/* allocate memory for f2fs-specific super block info */
 	sbi = kzalloc(sizeof(struct f2fs_sb_info), GFP_KERNEL);
 	if (!sbi)
@@ -2085,7 +1972,6 @@ try_onemore:
 		goto free_io_dummy;
 	}
 
-get_cp:
 	err = get_valid_checkpoint(sbi);
 	if (err) {
 		f2fs_msg(sb, KERN_ERR, "Failed to get valid F2FS checkpoint");

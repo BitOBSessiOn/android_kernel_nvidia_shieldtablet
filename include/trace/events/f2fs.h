@@ -903,7 +903,6 @@ DECLARE_EVENT_CLASS(f2fs__page,
 	TP_fast_assign(
 		__entry->dev	= page->mapping->host->i_sb->s_dev;
 		__entry->ino	= page->mapping->host->i_ino;
-		__entry->rw	= rw;
 		__entry->type	= type;
 		__entry->dir	= S_ISDIR(page->mapping->host->i_mode);
 		__entry->index	= page->index;
@@ -914,7 +913,6 @@ DECLARE_EVENT_CLASS(f2fs__page,
 	TP_printk("dev = (%d,%d), ino = %lu, %s, %s, index = %lu, "
 		"dirty = %d, uptodate = %d",
 		show_dev_ino(__entry),
-		show_bio_type(__entry->rw),
 		show_block_type(__entry->type),
 		show_file_type(__entry->dir),
 		(unsigned long)__entry->index,

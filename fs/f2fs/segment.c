@@ -56,28 +56,6 @@ static struct kmem_cache *inmem_entry_slab;
 		pos = n)
 
 /**
- * Copied from latest lib/llist.c
- * llist_reverse_order - reverse order of a llist chain
- * @head:	first item of the list to be reversed
- *
- * Reverse the order of a chain of llist entries and return the
- * new first entry.
- */
-struct llist_node *llist_reverse_order(struct llist_node *head)
-{
-	struct llist_node *new_head = NULL;
-
-	while (head) {
-		struct llist_node *tmp = head;
-		head = head->next;
-		tmp->next = new_head;
-		new_head = tmp;
-	}
-
-	return new_head;
-}
-
-/**
  * Copied from latest linux/list.h
  * list_last_entry - get the last element from a list
  * @ptr:        the list head to take the element from.
@@ -1152,8 +1130,6 @@ static void __wait_discard_cmd(struct f2fs_sb_info *sbi, bool wait_cond)
 			wait_for_completion_io(&dc->wait);
 			__remove_discard_cmd(sbi, dc);
 		}
-		if (!test_and_set_bit(segno, dirty_i->dirty_segmap[t]))
-			dirty_i->nr_dirty[t]++;
 	}
 	mutex_unlock(&dcc->cmd_lock);
 }
@@ -1575,7 +1551,6 @@ static void update_sit_entry(struct f2fs_sb_info *sbi, block_t blkaddr, int del)
 	struct seg_entry *se;
 	unsigned int segno, offset;
 	long int new_vblocks;
-	bool check_map = false;
 
 	segno = GET_SEGNO(sbi, blkaddr);
 
@@ -1586,6 +1561,7 @@ static void update_sit_entry(struct f2fs_sb_info *sbi, block_t blkaddr, int del)
 	f2fs_bug_on(sbi, (new_vblocks >> (sizeof(unsigned short) << 3) ||
 				(new_vblocks > sbi->blocks_per_seg)));
 
+	se->valid_blocks = new_vblocks;
 	se->mtime = get_mtime(sbi);
 	SIT_I(sbi)->max_mtime = se->mtime;
 
@@ -1627,30 +1603,6 @@ static void update_sit_entry(struct f2fs_sb_info *sbi, block_t blkaddr, int del)
 			f2fs_test_and_clear_bit(offset, se->discard_map))
 			sbi->discard_blks++;
 	}
-
-	if (unlikely(check_map)) {
-		int i;
-		long int vblocks = 0;
-
-		f2fs_msg(sbi->sb, KERN_ERR,
-				"cannot %svalidate block %u in segment %u with %hu valid blocks",
-				(del < 0) ? "in" : "",
-				offset, segno, se->valid_blocks);
-
-		/* assume the count was stale to start */
-		del = 0;
-		for (i = 0; i < sbi->blocks_per_seg; i++)
-			if (f2fs_test_bit(i, se->cur_valid_map))
-				vblocks++;
-		if (vblocks != se->valid_blocks) {
-			f2fs_msg(sbi->sb, KERN_INFO, "correcting valid block "
-				"counts %d -> %ld", se->valid_blocks, vblocks);
-			/* make accounting corrections */
-			del = vblocks - se->valid_blocks;
-		}
-	}
-	se->valid_blocks += del;
-
 	if (!f2fs_test_bit(offset, se->ckpt_valid_map))
 		se->ckpt_valid_blocks += del;
 
@@ -1681,12 +1633,6 @@ void invalidate_blocks(struct f2fs_sb_info *sbi, block_t addr)
 	f2fs_bug_on(sbi, addr == NULL_ADDR);
 	if (addr == NEW_ADDR)
 		return;
-
-	if (segno >= TOTAL_SEGS(sbi)) {
-		f2fs_msg(sbi->sb, KERN_ERR, "invalid segment number %u", segno);
-		if (f2fs_handle_error(sbi))
-			return;
-	}
 
 	/* add it into sit main buffer */
 	mutex_lock(&sit_i->sentry_lock);
@@ -2328,18 +2274,6 @@ reallocate:
 
 	if (fio->type == NODE || fio->type == DATA)
 		mutex_unlock(&fio->sbi->wio_mutex[fio->type]);
-}
-
-static void do_write_page(struct f2fs_sb_info *sbi, struct page *page,
-			block_t old_blkaddr, block_t *new_blkaddr,
-			struct f2fs_summary *sum, struct f2fs_io_info *fio)
-{
-	int type = __get_segment_type(page, fio->type);
-
-	allocate_data_block(sbi, page, old_blkaddr, new_blkaddr, sum, type);
-
-	/* writeout dirty page into bdev */
-	f2fs_submit_page_mbio(sbi, page, *new_blkaddr, fio);
 }
 
 void write_meta_page(struct f2fs_sb_info *sbi, struct page *page)

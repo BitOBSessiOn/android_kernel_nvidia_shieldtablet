@@ -620,7 +620,6 @@ static inline unsigned short curseg_blkoff(struct f2fs_sb_info *sbi, int type)
 	return curseg->next_blkoff;
 }
 
-#ifdef CONFIG_F2FS_CHECK_FS
 static inline void check_seg_range(struct f2fs_sb_info *sbi, unsigned int segno)
 {
 	f2fs_bug_on(sbi, segno > TOTAL_SEGS(sbi) - 1);
@@ -663,38 +662,6 @@ static inline void check_block_count(struct f2fs_sb_info *sbi,
 	f2fs_bug_on(sbi, GET_SIT_VBLOCKS(raw_sit) > sbi->blocks_per_seg
 					|| segno > TOTAL_SEGS(sbi) - 1);
 }
-#else
-static inline void check_seg_range(struct f2fs_sb_info *sbi, unsigned int segno)
-{
-	unsigned int end_segno = SM_I(sbi)->segment_count - 1;
-
-	if (segno > end_segno)
-		sbi->need_fsck = true;
-}
-
-static inline void verify_block_addr(struct f2fs_sb_info *sbi, block_t blk_addr)
-{
-	if (blk_addr < SEG0_BLKADDR(sbi) || blk_addr >= MAX_BLKADDR(sbi))
-		sbi->need_fsck = true;
-}
-
-/*
- * Summary block is always treated as an invalid block
- */
-static inline void check_block_count(struct f2fs_sb_info *sbi,
-		int segno, struct f2fs_sit_entry *raw_sit)
-{
-	unsigned int end_segno = SM_I(sbi)->segment_count - 1;
-
-	/* check segment usage */
-	if (GET_SIT_VBLOCKS(raw_sit) > sbi->blocks_per_seg)
-		sbi->need_fsck = true;
-
-	/* check boundary of a given segment number */
-	if (segno > end_segno)
-		sbi->need_fsck = true;
-}
-#endif
 
 static inline pgoff_t current_sit_addr(struct f2fs_sb_info *sbi,
 						unsigned int start)

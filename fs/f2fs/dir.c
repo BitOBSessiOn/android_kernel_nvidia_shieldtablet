@@ -159,7 +159,6 @@ static struct f2fs_dir_entry *find_in_level(struct inode *dir,
 	unsigned int bidx, end_block;
 	struct page *dentry_page;
 	struct f2fs_dir_entry *de = NULL;
-	struct f2fs_sb_info *sbi = F2FS_SB(dir->i_sb);
 	bool room = false;
 	int max_slots;
 	f2fs_hash_t namehash = f2fs_dentry_hash(&name, fname);
@@ -172,8 +171,6 @@ static struct f2fs_dir_entry *find_in_level(struct inode *dir,
 	end_block = bidx + nblock;
 
 	for (; bidx < end_block; bidx++) {
-		bool nocase = false;
-
 		/* no need to allocate new dentry pages to all the indices */
 		dentry_page = find_data_page(dir, bidx);
 		if (IS_ERR(dentry_page)) {
@@ -615,27 +612,6 @@ int __f2fs_do_add_link(struct inode *dir, struct fscrypt_name *fname,
 	return err;
 }
 
-int f2fs_do_tmpfile(struct inode *inode, struct inode *dir)
-{
-	struct page *page;
-	int err = 0;
-
-	down_write(&F2FS_I(inode)->i_sem);
-	page = init_inode_metadata(inode, dir, NULL);
-	if (IS_ERR(page)) {
-		err = PTR_ERR(page);
-		goto fail;
-	}
-	/* we don't need to mark_inode_dirty now */
-	update_inode(inode, page);
-	f2fs_put_page(page, 1);
-
-	clear_inode_flag(F2FS_I(inode), FI_NEW_INODE);
-fail:
-	up_write(&F2FS_I(inode)->i_sem);
-	return err;
-}
-
 /*
  * Caller should grab and release a rwsem by calling f2fs_lock_op() and
  * f2fs_unlock_op().
@@ -923,8 +899,8 @@ static int f2fs_readdir(struct file *file, void *dirent, filldir_t filldir)
 		}
 
 		bit_pos = 0;
-		kunmap(dentry_page);
 		file->f_pos = (n + 1) * NR_DENTRY_IN_BLOCK;
+		kunmap(dentry_page);
 		f2fs_put_page(dentry_page, 1);
 	}
 out:

@@ -31,8 +31,8 @@
 #include <linux/thermal.h>
 
 #ifdef CONFIG_THERMAL_HWMON
-int thermal_add_hwmon_sysfs(struct thermal_zone_device *tz);
-void thermal_remove_hwmon_sysfs(struct thermal_zone_device *tz);
+static int thermal_add_hwmon_sysfs(struct thermal_zone_device *tz);
+static void thermal_remove_hwmon_sysfs(struct thermal_zone_device *tz);
 #else
 static int
 thermal_add_hwmon_sysfs(struct thermal_zone_device *tz)
